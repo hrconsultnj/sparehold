@@ -32,15 +32,20 @@ extension MenuContentView {
                     .labelStyle(.iconOnly)
             }
             .help("Open Settings")
+            // the version is always text; an available update is a star that
+            // opens Updates — the panel never installs anything itself
+            Text(updates.build.shortVersionText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(updates.build.versionText)        // the full version, build metadata included
             if updates.offersInstall {
-                Button(updates.installTitle) { updates.requestInstall() }
-                    .buttonStyle(.borderedProminent)
-                    .help("Installs the channel you picked, then quits and opens the new copy. Settings are kept")
-            } else {
-                Text(updates.build.shortVersionText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help(updates.build.versionText)        // the full version, build metadata included
+                Button {
+                    SettingsOpener.open(target: "update")
+                } label: {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+                .help("An update is available — open Updates to install it")
             }
             Spacer()
             Button {
