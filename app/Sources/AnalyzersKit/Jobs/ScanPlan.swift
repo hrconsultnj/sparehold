@@ -5,7 +5,8 @@ import Foundation
 /// The slow reports come first, so the previews a person reviews finish last, inside
 /// `JobStore.reviewWindow`. The store runs one job at a time, so the memory-heavy scans never overlap.
 /// Every preview carries the options its own screen starts with (`JobOptions()` for all of them but Old
-/// Recordings, whose days are a setting), so Apply on that screen still works on what the scan found.
+/// Recordings, whose preview looks at every age — the saved days are the scheduled clean's own limit,
+/// never the screen's), so Apply on that screen still works on what the scan found.
 /// Nothing here can change the Mac: the kinds are reports and previews, never an apply, an install or an eject.
 public enum ScanPlan {
 
@@ -25,7 +26,7 @@ public enum ScanPlan {
                 switch kind {
                 case .recordings:
                     storage.hasRecordingSources
-                        ? JobRequest(kind: kind, intent: .preview, options: JobOptions(recordingsDays: storage.recordingsDays))
+                        ? JobRequest(kind: kind, intent: .preview, options: JobOptions(recordingsDays: 0))
                         : nil
                 case .loginItems:
                     includeLoginItems ? JobRequest(kind: kind, intent: .preview) : nil

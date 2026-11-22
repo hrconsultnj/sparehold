@@ -9,25 +9,24 @@ enum SystemRoute: Hashable, Codable, Sendable {
     case reportSection(report: String, index: Int)
 }
 
-/// Network, Login & Startup Items and Reports.
+/// Network and Login & Startup Items — the Mac's live parts: what it talks to,
+/// what starts with it. Reports lives in the History group: it is the analyzers'
+/// written record over time, not a live part.
 @MainActor
 enum SystemGroup {
 
     static let network = SectionID("network")
     static let loginItems = SectionID("loginItems")
-    static let reports = SectionID("reports")
 
     static let group = SidebarGroup(
         title: Names.Group.system,
         rows: [
             SidebarRow(network, Names.Screen.network, symbol: "network", tint: .orange),
             SidebarRow(loginItems, Names.Screen.loginItems, symbol: "person.crop.circle.badge.questionmark", tint: .orange),
-            SidebarRow(reports, Names.Screen.reports, symbol: "doc.text.magnifyingglass", tint: .orange),
         ],
         root: screen,
         aliases: [
             "network": .main(Location(network)),
-            "reports": .main(Location(reports)),
             "loginitems": .main(Location(loginItems)),
             "log:loginItems": .main(Location(loginItems)),
             // the startup-changes history is the Changes scope of Login & Startup Items
@@ -40,13 +39,11 @@ enum SystemGroup {
     ///  - `startup:changes|leftovers|select:<name>` — Login & Startup Items on the Changes scope,
     ///    filtered to leftovers, or with that item open in the inspector;
     ///  - `network:history|older|pick:<n>` — Network on History, on the previous snapshot, or
-    ///    with the nth-largest program open;
-    ///  - `reports:pick:<n>|section:<n>|raw` — Reports with the nth report open, its nth
-    ///    section pushed, or its source pushed.
+    ///    with the nth-largest program open.
     /// Pure: the screen reads the data and applies the request when it has it.
     private static func resolveDynamic(_ target: String) -> Resolution? {
         let sections: [(prefix: String, section: SectionID)] = [
-            ("startup:", loginItems), ("network:", network), ("reports:", reports),
+            ("startup:", loginItems), ("network:", network),
         ]
         for (prefix, section) in sections where target.hasPrefix(prefix) {
             return .mainWithIntent(Location(section),
@@ -59,7 +56,6 @@ enum SystemGroup {
         switch section {
         case network: NetworkView()
         case loginItems: LoginItemsView()
-        case reports: ReportsView()
         default: EmptyView()
         }
     }

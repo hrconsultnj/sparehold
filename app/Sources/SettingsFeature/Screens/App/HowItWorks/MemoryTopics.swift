@@ -134,7 +134,7 @@ extension HowItWorksTopic {
                 onThisMac: f.logsRead ? ["This week it helped free \(f.megabytes(f.week.memoryFreedMB))."] : [],
                 never: ["A run you start yourself never closes anything you did not see in a preview, and no run touches your protected programs."],
                 written: ["Each run writes a full report (see \(Names.HowItWorks.whereWritten)) and appears in Activity."],
-                actions: [.init(title: "Open \(Names.Screen.memoryCleanup)", detail: "Preview what is idle now, untick anything you want kept, and apply",
+                actions: [.init(title: "Open \(Names.Screen.memoryCleanup)", detail: "Find what is idle now, untick anything you want kept, and close it",
                                 target: "actions:memoryClean"),
                           .init(title: Names.HowItWorks.change, detail: "Choose when the scheduled run happens", target: "schedule")],
                 question: .init(ask: "Will it close my editor or my chat app?",

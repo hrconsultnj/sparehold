@@ -16,6 +16,11 @@
 # meeting folder, or a file. This script never looks for a folder: it is told where.
 #   ./cleanup.sh --recordings-older-than 90            # dry run
 #   ./cleanup.sh --recordings-older-than 90 --execute  # move to the Trash
+#   ./cleanup.sh --recordings-older-than 0             # EVERY recording, whatever its age
+#                                                      # (0 = no age limit: what the app's screen
+#                                                      # previews, so the whole folder's size shows
+#                                                      # and a range is chosen there; the scheduled
+#                                                      # run always passes the saved days)
 #
 # GRANULAR per-app removal (opt-in; isolated from the cache/log groups above).
 # Sweeps an app's WHOLE footprint: bundle + Application Support, Caches,
@@ -916,6 +921,10 @@ rec_refusal() {
 rec_old() {
   local newest find_rc
   REC_UNREADABLE=0
+  # 0 days (or less) is no age filter: the screen's whole-folder look lists
+  # every recording so it can band them by age. The scheduled run always
+  # passes the saved, positive number, so this changes nothing there.
+  [[ "$2" -le 0 ]] && return 0
   newest="$(find "$1" -mtime "-$2" -print -quit 2>"$REC_ERR")"; find_rc=$?
   [[ -z "$newest" ]] || return 1
   if [[ "$find_rc" -ne 0 || -s "$REC_ERR" ]]; then REC_UNREADABLE=1; fi
@@ -1011,7 +1020,11 @@ rec_scan() {
 }
 
 if [[ -n "$REC_DAYS" ]]; then
-  group "Recordings older than ${REC_DAYS} days  (cache/log groups skipped)"
+  if [[ "$REC_DAYS" -le 0 ]]; then
+    group "Recordings, every age  (cache/log groups skipped)"
+  else
+    group "Recordings older than ${REC_DAYS} days  (cache/log groups skipped)"
+  fi
   REC_ERR="$(mktemp "${TMPDIR:-/tmp}/cleanup-rec.XXXXXX")"
   trap 'rm -f "${REC_ERR:-}"' EXIT
   REC_UNREADABLE=0; REC_KEEP_ZOOM=0

@@ -59,9 +59,9 @@ extension HowItWorksTopic {
                 onThisMac: [],
                 never: ["Anything that is open, in use, owned by someone else, or a mounted disk image you have not approved is never touched."],
                 written: ["Each run writes a report and appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                actions: [.init(title: "Open \(Names.Screen.downloads)", detail: "Preview old files and screenshots, and choose what goes to the Trash",
+                actions: [.init(title: "Open \(Names.Screen.downloads)", detail: "Find old files and screenshots, and choose what goes to the Trash",
                                 target: "downloads"),
-                          .init(title: "Open \(Names.Screen.tempAndAgents)", detail: "Preview idle temporary files, agent scratch folders and tool downloads",
+                          .init(title: "Open \(Names.Screen.tempAndAgents)", detail: "Find idle temporary files, agent scratch folders and tool downloads",
                                 target: "temp")],
                 question: .init(ask: "Are the files gone for good?",
                                 answer: "No. What you apply goes to the Trash, and Undo lists it so you can put it back exactly where it was — see \(Names.HowItWorks.trashVsUndo)."))
@@ -81,7 +81,8 @@ extension HowItWorksTopic {
                 summary: f.timeMachinePermission ? "Permission given on this Mac." : "Needs a one-time permission.",
                 what: "While Time Machine backs up, macOS keeps hourly copies of your files on this Mac itself — local snapshots, invisible in Finder — so a file you deleted this morning can still be brought back. They use disk space.",
                 does: [
-                    "The \(Names.Screen.timeMachine) screen lists the local snapshots on this Mac so you can delete the ones you do not need.",
+                    "The \(Names.Screen.timeMachine) screen lists every local snapshot on this Mac, of every age, grouped into bands — under 7 days, 7 to 30, 30 to 90, older — so the whole folder is in front of you, not just the newest hourlies.",
+                    "APFS cannot say how much space one snapshot holds, so the screen counts them, and the free-space figure before and after a delete is the honest number.",
                     "Deleting snapshots needs a one-time permission, with your administrator password, for exactly one command. After that, any program running on your account can delete local snapshots without asking, and nothing else is allowed. \(permission)",
                 ] + (byItself.isEmpty ? [] : [byItself]),
                 onThisMac: [],
@@ -110,19 +111,20 @@ extension HowItWorksTopic {
 
         case .oldRecordings:
             return TopicContent(
-                summary: "Recordings older than \(f.days(f.recordingsDays)), in the folders you choose.",
-                what: "Recordings pile up where your tools save them — Zoom, screen recordings, voice memos. This screen looks in the folders you choose for the ones older than your age limit.",
+                summary: "Every recording in the folders you choose, banded by age; the scheduled clean uses \(f.days(f.recordingsDays)).",
+                what: "Recordings pile up where your tools save them — Zoom, screen recordings, voice memos. This screen looks in the folders you choose and shows recordings of EVERY age, grouped into bands: under 7 days, 7 to 30, 30 to 90, older.",
                 does: [
-                    "\(Names.Screen.oldRecordings) looks through the folders where you keep recordings (Zoom, screen recordings, voice memos and the like; you choose them with Sources on its screen) for ones older than \(f.days(f.recordingsDays)).",
-                    "You review a preview, and what you apply goes to the Trash, and Undo puts it back.",
+                    "\(Names.Screen.oldRecordings) looks through the folders where you keep recordings (Zoom, screen recordings, voice memos and the like; you choose them with Sources on its screen) and lists everything in them, with its size, in age bands — so the whole folder's size is in front of you.",
+                    "Select a band — say, everything older than 7 days — or tick single recordings, review the list, and apply: only what you reviewed moves, to the Trash, and Undo puts it back.",
+                    "The scheduled clean is separate: it offers recordings older than \(f.days(f.recordingsDays)) (the age in Sources), for the same kind of review. Choosing a range on the screen never changes that setting.",
                 ],
                 onThisMac: [],
                 never: ["Nothing is removed without a preview you reviewed, and it has no schedule of its own."],
                 written: ["Each run appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                actions: [.init(title: "Open \(Names.Screen.oldRecordings)", detail: "Choose the folders to look in, preview the old recordings, and untick anything you want kept",
+                actions: [.init(title: "Open \(Names.Screen.oldRecordings)", detail: "See every recording by age band, select a range or single rows, and untick anything you want kept",
                                 target: "recordings")],
-                question: .init(ask: "What if a recording I need is older than the limit?",
-                                answer: "It is only ever a preview: the old recordings are listed, you untick anything you want kept, and what you do not apply never moves."))
+                question: .init(ask: "Can I clear just one range — say, everything older than 7 days?",
+                                answer: "Yes. Select the bands past that line (or tick rows one by one), review what the bar says will move, and apply. The saved age limit only decides what the scheduled clean offers; this screen never reads it."))
         default:
             return TopicContent(summary: "")
         }

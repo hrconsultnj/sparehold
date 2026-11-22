@@ -38,7 +38,9 @@ import Foundation
     check("memory cleanup and reclaim are last", Array(kinds.suffix(2)) == [.memoryClean, .reclaim], "\(kinds.suffix(2))")
     let others = plan.filter { $0.kind != .recordings }
     check("every preview but Old Recordings uses its screen's own default options", others.allSatisfy { $0.options == JobOptions() })
-    check("Old Recordings uses the saved days", plan.first { $0.kind == .recordings }?.options == JobOptions(recordingsDays: 180))
+    // the saved days are the SCHEDULED clean's own limit: the screen (and so the scan it mirrors)
+    // previews every age, so the whole folder shows and a range is chosen there
+    check("Old Recordings previews every age, whatever the saved days", plan.first { $0.kind == .recordings }?.options == JobOptions(recordingsDays: 0))
 
     var catalog = StorageTunables()
     catalog.recordingSourcesConfigured = true

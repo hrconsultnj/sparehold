@@ -37,8 +37,17 @@ public enum StorageSetting {
         case .storageClean: JobOptions(deep: banner.contains("mode=deep"))
         case .tempClean: JobOptions(permanent: banner.lowercased().contains("permanent"))
         case .tmReclaim: JobOptions(startBackup: !banner.contains("backup=off"))
+        case .guardian: JobOptions(worktreeIdleDays: number("idle", in: banner) ?? 14,
+                                   parkedDays: number("parked", in: banner) ?? 30,
+                                   reportsDays: number("reports", in: banner) ?? 90)
         default: JobOptions()
         }
+    }
+
+    /// `idle=14` in a Guardian banner.
+    private static func number(_ name: String, in banner: String) -> Int? {
+        banner.range(of: #"\#(name)=(\d+)"#, options: .regularExpression)
+            .flatMap { Int(banner[$0].split(separator: "=")[1]) }
     }
 
     /// Only the fields a kind's screen offers count as its setting.
@@ -47,6 +56,8 @@ public enum StorageSetting {
         case .storageClean: JobOptions(deep: options.deep)
         case .tempClean: JobOptions(permanent: options.permanent)
         case .tmReclaim: JobOptions(startBackup: options.startBackup)
+        case .guardian: JobOptions(worktreeIdleDays: options.worktreeIdleDays,
+                                   parkedDays: options.parkedDays, reportsDays: options.reportsDays)
         default: JobOptions()
         }
     }
@@ -101,11 +112,34 @@ public struct CleanWords: Equatable, Sendable {
         }
     }
 
+    /// The words for the cleanups whose setting is fixed: everything reviewed goes
+    /// to the Trash (Downloads, Unused Apps, Old Recordings), wherever they are
+    /// asked about — a screen or a finished preview's results.
+    public static func pathsToTrash() -> CleanWords {
+        CleanWords(applyTitle: "Move to Trash", verb: "Move", destination: "to the Trash",
+                   message: "You can put them back from Undo. The space returns when the Trash is emptied.",
+                   permanentWarning: nil)
+    }
+
+    /// The Guardian's removals, in plain words: what parking did (the ledger row is
+    /// the receipt), what survives, and what goes for good. The ages name the setting
+    /// the preview was made with.
+    public static func guardian(idle: Int, parked: Int, reports: Int) -> CleanWords {
+        CleanWords(applyTitle: "Remove", verb: "Remove", destination: "permanently",
+                   message: "Each removed worktree's local-only files are copied into Sparehold's reports folder first, "
+                       + "with instructions to bring it back; its branch and commits stay. Worktrees idle more than \(idle) days "
+                       + "are offered, parked files older than \(parked) days and report folders older than \(reports) days.",
+                   permanentWarning: "Removed folders are not moved to the Trash. A removed worktree can be rebuilt with the "
+                       + "restore commands in Sparehold's removal ledger; old report folders can't be brought back.")
+    }
+
     public static func words(kind: JobKind, setting: JobOptions) -> CleanWords? {
         switch kind {
         case .storageClean: caches(deep: setting.deep)
         case .tempClean: temp(permanent: setting.permanent)
         case .tmReclaim: timeMachine(backup: setting.startBackup)
+        case .guardian: guardian(idle: setting.worktreeIdleDays, parked: setting.parkedDays, reports: setting.reportsDays)
+        case .janitor, .unusedApps, .recordings: pathsToTrash()
         default: nil
         }
     }

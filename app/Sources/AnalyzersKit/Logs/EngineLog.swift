@@ -4,7 +4,7 @@ import Foundation
 /// lives. How each one looks (title, symbol, tint) is the presentation
 /// extension in SettingsFeature.
 public enum EngineLog: String, CaseIterable, Identifiable, Sendable {
-    case guardLog, memoryClean, reclaim, storageClean, janitor, tempSpace, persistence,
+    case guardLog, memoryClean, reclaim, storageClean, guardian, janitor, tempSpace, persistence,
          loginItems, spotlightAudit, cleanupApps, cleanupRecordings, tmReclaim, forensics
     public var id: String { rawValue }
 
@@ -14,6 +14,7 @@ public enum EngineLog: String, CaseIterable, Identifiable, Sendable {
         case .memoryClean: AnalyzersPaths.memoryAutoCleanLog
         case .reclaim: AnalyzersPaths.reclaimLog
         case .storageClean: AnalyzersPaths.storageAutoCleanLog
+        case .guardian: AnalyzersPaths.guardianLog
         case .janitor: AnalyzersPaths.janitorLog
         case .tempSpace: AnalyzersPaths.tempCleanLog
         case .persistence: AnalyzersPaths.persistenceLog

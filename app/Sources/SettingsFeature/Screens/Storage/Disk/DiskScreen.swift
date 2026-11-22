@@ -19,7 +19,7 @@ struct DiskScreen: View {
     /// The worst case, for `SnapshotRunner`; nil in the app.
     var fixture: (usage: DiskUsage, runway: DiskRunway, reason: String, tasks: [StorageTask])?
 
-    private static let previewKinds: [JobKind] = [.storageClean, .janitor, .tempClean, .spotlight]
+    private static let previewKinds: [JobKind] = [.storageClean, .janitor, .tempClean, .spotlight, .guardian]
 
     private var allPreviewsActive: Bool {
         Self.previewKinds.allSatisfy { kind in
@@ -48,9 +48,9 @@ struct DiskScreen: View {
         .helpTopic(.safeToRemove, screen: Names.Screen.disk)
         .toolbar {
             ToolbarItem {
-                Button { checkAll() } label: { Label("Preview All", systemImage: "eye") }
+                Button { checkAll() } label: { Label(Names.Review.preview, systemImage: "eye") }
                     .labelStyle(.titleAndIcon)
-                    .help("Preview every cleanup on this screen, one after another; nothing is changed")
+                    .help("Check every cleanup on this screen, one after another; nothing is changed")
                     .disabled(allPreviewsActive)
             }
             .toolbarRank(.primary)
@@ -70,7 +70,7 @@ struct DiskScreen: View {
                         Label(usage.lowText, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                         Text(reclaimable > 0
                              ? "The cleanups below could give back \(ByteSize.format(reclaimable)). Open one to review what it would clear."
-                             : "Preview the cleanups below to see what could be cleared.")
+                             : "Run the checks below to see what could be cleared.")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -122,16 +122,10 @@ struct DiskScreen: View {
                 VStack(alignment: .leading, spacing: Tokens.Space.hair) {
                     Text("Cleaned space can stay invisible until Time Machine's local snapshots thin.")
                         .font(.callout)
-                    Text("The Deep Clean thins them (it already runs with that permission). After a cleanup, thin from Time Machine to see the freed space in Finder.")
+                    Text("The Deep Clean thins them (it already runs with that permission). After a cleanup, open Time Machine above to see the freed space in Finder.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: Tokens.Space.m)
-                Button("Time Machine") {
-                    navigator.open(target: "timeMachine")
-                }
-                .controlSize(.small)
-                .help("Open Time Machine to thin local snapshots now")
             }
             .padding(Tokens.Space.s)
             .background(Tokens.Surface.tile, in: RoundedRectangle(cornerRadius: Tokens.Radius.tile))
@@ -178,6 +172,10 @@ struct DiskScreen: View {
         case .janitor: "arrow.down.circle"
         case .tempClean: "tray.full"
         case .spotlight: "magnifyingglass"
+        case .tmReclaim: "clock.arrow.circlepath"
+        case .unusedApps: "app.badge.checkmark"
+        case .recordings: "film"
+        case .guardian: "shield.lefthalf.filled"
         default: "internaldrive"
         }
     }
@@ -187,6 +185,10 @@ struct DiskScreen: View {
         case .storageClean: "caches"
         case .janitor: "downloads"
         case .tempClean: "temp"
+        case .tmReclaim: "timemachine"
+        case .unusedApps: "unused"
+        case .recordings: "recordings"
+        case .guardian: "guardian"
         default: "spotlight"
         }
         navigator.open(target: target)

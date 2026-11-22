@@ -86,7 +86,7 @@ struct OverviewView: View {
             ToolbarItem {
                 Button { scanEverything() } label: { Label(Names.Overview.scanEverything, systemImage: "sparkle.magnifyingglass") }
                     .labelStyle(.titleAndIcon)
-                    .help("Preview every cleanup and write every report, one after another; nothing is changed")
+                    .help("Check every cleanup and write every report, one after another; nothing is changed")
                     .disabled(jobs.batchIsActive)
             }
             .toolbarRank(.primary)

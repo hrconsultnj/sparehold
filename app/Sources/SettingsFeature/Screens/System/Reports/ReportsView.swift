@@ -229,7 +229,7 @@ struct ReportsView: View {
 
     /// A deep link's request: open the nth report, or push its source.
     private func applyPendingLink() {
-        guard let payload = navigator.takeIntent(for: SystemGroup.reports) else { return }
+        guard let payload = navigator.takeIntent(for: HistoryGroup.reports) else { return }
         if payload.hasPrefix("pick:"), let n = Int(payload.dropFirst("pick:".count)) {
             let all = months.flatMap(\.reports)
             if all.indices.contains(n) { model.selection = all[n].id }

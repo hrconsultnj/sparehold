@@ -90,6 +90,8 @@ struct UndoView: View {
     /// The screen's two groups: the chips are their headers, so the summary and
     /// the rows are one truth. Restorable first; the emptied history below,
     /// drawn dimmed. A row only opens — the cleanup's screen holds the actions.
+    /// Under the rows, the one line that says what Undo does that the Trash
+    /// alone does not.
     private func cleanupList(_ reconciliation: UndoReconciliation) -> some View {
         List {
             if !reconciliation.restorable.cleanups.isEmpty {
@@ -106,6 +108,13 @@ struct UndoView: View {
                     }
                 }
             }
+        }
+        .safeAreaBar(edge: .bottom, spacing: 0) {
+            Text(Names.Undo.explains)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .barMargin(edge: .bottom)
         }
     }
 

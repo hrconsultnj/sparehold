@@ -136,7 +136,9 @@ public struct ActivitySummary: Sendable, Hashable {
         case .tempSpace: .temp(TempCleanParser.parse(runHeader: run.header, lines: run.lines))
         case .spotlightAudit: .spotlight(SpotlightAuditParser.parse(runHeader: run.header, lines: run.lines))
         case .loginItems: .loginItems(LoginItemsParser.parse(runHeader: run.header, lines: run.lines))
-        case .guardLog, .persistence, .forensics, .cleanupApps, .cleanupRecordings, .tmReclaim: .none
+        // the Guardian's runs are read by `GuardianReview` (the Storage screens join the
+        // block themselves), like Time Machine's
+        case .guardian, .guardLog, .persistence, .forensics, .cleanupApps, .cleanupRecordings, .tmReclaim: .none
         }
     }
 

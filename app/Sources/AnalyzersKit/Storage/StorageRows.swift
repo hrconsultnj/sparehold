@@ -31,9 +31,52 @@ public struct StorageTab: StorageCategory {
     public func hash(into hasher: inout Hasher) { hasher.combine(rawValue) }
 }
 
+/// How long ago something was made, in bands a person names a range by
+/// ("delete older than 7 days"). The whole-range screens — Old Recordings and
+/// Time Machine — group by these, so the WHOLE folder's size is visible per
+/// band and a band's action acts on that band only. The boundaries are fixed
+/// (7, 30, 90 days) so a band means the same thing every day, and they bracket
+/// the ages the retention setting is usually set to: 7 is the range a person
+/// names on the screen, 30 and 90 are the setting's own defaults.
+public enum AgeBand: Int, CaseIterable, Identifiable, Comparable, Sendable {
+    case under7 = 0, days7to30, days30to90, over90, unknown
+    public var id: Int { rawValue }
+
+    public static func < (lhs: AgeBand, rhs: AgeBand) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    public init(days: Int?) {
+        guard let days else { self = .unknown; return }
+        switch days {
+        case ..<7: self = .under7
+        case ..<30: self = .days7to30
+        case ..<90: self = .days30to90
+        default: self = .over90
+        }
+    }
+
+    /// The band for a thing made at `date`, counted to `now` in whole days (a
+    /// clock in the future counts as brand new).
+    public init(date: Date?, now: Date, calendar: Calendar = .current) {
+        guard let date else { self = .unknown; return }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                           to: calendar.startOfDay(for: now)).day ?? 0
+        self.init(days: max(0, days))
+    }
+
+    public var title: String {
+        switch self {
+        case .under7: Names.Band.under7
+        case .days7to30: Names.Band.days7to30
+        case .days30to90: Names.Band.days30to90
+        case .over90: Names.Band.over90
+        case .unknown: Names.Download.dateUnknown
+        }
+    }
+}
+
 /// One thing a Storage review or a finished run shows, in the shape every Storage
 /// screen shares: its tab (`category`), the real thing it belongs to (`group`: a
-/// project, an app, an agent, an age), and what it is called for a person. Built
+/// project, an app, an agent, an age band), and what it is called for a person. Built
 /// by each screen's review from its parser; nothing is recovered from a title.
 public struct StorageRow: Identifiable, Hashable, Sendable {
     /// The engine's own key: a path, or `prune:<id>`. What the reviewed list holds.
@@ -51,9 +94,15 @@ public struct StorageRow: Identifiable, Hashable, Sendable {
     public let iconPath: String?
     /// Set when the cleanup leaves the row alone: why, in words.
     public let keptReason: String?
+    /// The age band the row sits in, for the screens that band by age (Old
+    /// Recordings, Time Machine); nil for a screen that does not band. The
+    /// band strip reads this, not the group's title, so words can change
+    /// without the bands losing their meaning.
+    public let band: AgeBand?
 
     public init(id: String, category: String, group: String?, title: String, detail: String? = nil,
-                bytes: Int64? = nil, valueText: String? = nil, iconPath: String? = nil, keptReason: String? = nil) {
+                bytes: Int64? = nil, valueText: String? = nil, iconPath: String? = nil, keptReason: String? = nil,
+                band: AgeBand? = nil) {
         self.id = id
         self.category = category
         self.group = group
@@ -64,6 +113,7 @@ public struct StorageRow: Identifiable, Hashable, Sendable {
         self.iconPath = iconPath
         // a key the reviewed list cannot carry is never offered for a tick (`ApprovedSet.isListable`)
         self.keptReason = keptReason ?? (ApprovedSet.isListable(id) ? nil : ApprovedSet.unlistableReason)
+        self.band = band
     }
 
     public var isChoosable: Bool { keptReason == nil }
@@ -112,6 +162,15 @@ public struct StorageRows: Sendable {
     }
     /// The categories that have rows, in declaration order.
     public func filled<C: StorageCategory>(_ type: C.Type) -> [C] { C.allCases.filter { count(in: $0) > 0 } }
+    /// The age bands that have rows, youngest first, "Date Unknown" last.
+    public var bands: [AgeBand] { AgeBand.allCases.filter { band in rows.contains { $0.band == band } } }
+    /// How many rows sit in a band, and what they add up to (rows without a
+    /// size count towards the number only).
+    public func count(in band: AgeBand) -> Int { rows.filter { $0.band == band }.count }
+    public func bytes(in band: AgeBand) -> Int64 { rows.filter { $0.band == band }.reduce(0) { $0 + ($1.bytes ?? 0) } }
+    /// The keys a review can offer for a tick in one band: what a band's
+    /// "Select" action sends to the session.
+    public func ids(in band: AgeBand) -> [String] { rows.filter { $0.band == band && $0.isChoosable }.map(\.id) }
     /// The keys a review can offer for a tick: every choosable row.
     public var choosable: [StorageRow] { rows.filter(\.isChoosable) }
     public var choosableBytes: Int64 { choosable.reduce(0) { $0 + ($1.bytes ?? 0) } }

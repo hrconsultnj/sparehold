@@ -117,6 +117,7 @@ public enum Names {
         public static let spotlight = "Spotlight"
         public static let unusedApps = "Unused Apps"
         public static let oldRecordings = "Old Recordings"
+        public static let guardian = "Cache Guardian"
         public static let network = "Network"
         public static let loginItems = "Login & Startup Items"
         public static let reports = "Reports"
@@ -286,6 +287,15 @@ public enum Names {
         public static let sixToTwelveMonths = "6 to 12 Months"
         public static let overAYear = "Over a Year"
         public static let dateUnknown = "Date Unknown"
+    }
+
+    /// The age bands of the whole-range screens (Old Recordings, Time Machine),
+    /// the same lines `AgeBand` draws: 7, 30 and 90 days.
+    public enum Band {
+        public static let under7 = "Under 7 Days"
+        public static let days7to30 = "7 to 30 Days"
+        public static let days30to90 = "30 to 90 Days"
+        public static let over90 = "Over 90 Days"
     }
 
     /// Time Machine: the words of its actions and its one-time permission.
@@ -516,6 +526,33 @@ public enum Names {
         public static let couldNotRun = "Couldn't Run"
     }
 
+    /// The Cache Guardian: its tabs, the groups inside them, and what a finished run did.
+    public enum Guardian {
+        /// The tabs.
+        public static let tabWorktrees = "Worktrees"
+        public static let tabStores = "Package Stores"
+        public static let tabRetention = "Old Reports"
+        public static let tabGuidance = "Guidance"
+        /// The stores the sweep sizes.
+        public static let storePnpm = "pnpm Store"
+        public static let storeNpm = "npm Cache"
+        public static let storeSccache = "Sccache Compilation Cache"
+        public static let storeCargo = "Cargo Registry"
+        /// Groups inside the tabs.
+        public static let reportRuns = "Report Runs"
+        public static let parkedFiles = "Parked Files"
+        public static let duplicatedFolders = "Duplicated Folders"
+        public static let globalStores = "Global Stores"
+        /// The mode menu: how long things are kept before they are offered.
+        public static let balanced = "Balanced"
+        public static let keepLonger = "Keep Longer"
+        public static let reclaimSooner = "Reclaim Sooner"
+        /// What a finished run did.
+        public static let removed = "Removed"
+        public static let couldNotRemove = "Couldn't Remove"
+        public static let leftAlone = "Left Alone"
+    }
+
     /// Developer-tool caches the deep cleanup can empty.
     public enum ToolCacheName {
         public static let pip = "pip Cache"
@@ -674,6 +711,7 @@ public enum Names {
         case .loginItems: Screen.loginItems
         case .unusedApps: Screen.unusedApps
         case .recordings: Screen.oldRecordings
+        case .guardian: Screen.guardian
         case .networkSnapshot: Screen.network
         case .memoryReport, .storageReport: Screen.reports
         case .installAgents, .uninstallAgents, .sudoersInstall: Screen.setup
@@ -689,6 +727,7 @@ public enum Names {
         case .storageClean: Screen.cachesAndBuilds
         case .janitor: Screen.downloads
         case .tempSpace: Screen.tempAndAgents
+        case .guardian: Screen.guardian
         case .persistence: startupChanges
         case .loginItems: Screen.loginItems
         case .spotlightAudit: Screen.spotlight
@@ -971,7 +1010,7 @@ public enum Names {
         rows += [Screen.overview, Screen.activity, Screen.setup, Screen.monitor, Screen.memoryGuard,
                  Screen.memoryCleanup, Screen.disk, Screen.cachesAndBuilds, Screen.downloads,
                  Screen.tempAndAgents, Screen.timeMachine, Screen.spotlight, Screen.unusedApps, Screen.oldRecordings,
-                 Screen.network, Screen.loginItems, Screen.reports, Screen.trends, Screen.undo,
+                 Screen.guardian, Screen.network, Screen.loginItems, Screen.reports, Screen.trends, Screen.undo,
                  Screen.settings, Screen.memorySettings, Screen.storageSettings, Screen.notifications, Screen.schedule,
                  Screen.updates, Screen.howItWorks, Screen.support, Screen.turnOff, Screen.actions]
             .map { ("Screen", $0) }
@@ -1005,6 +1044,11 @@ public enum Names {
                  StorageTab.diskImages, StorageTab.packageManagers, StorageTab.xcodeSimulators,
                  StorageTab.docker, StorageTab.toolCaches].map { ("Storage tab", $0) }
         rows += [Prune.pnpm, Prune.npm, Prune.brew, Prune.simulators, Prune.docker].map { ("Prune", $0) }
+        rows += [Guardian.tabWorktrees, Guardian.tabStores, Guardian.tabRetention, Guardian.tabGuidance,
+                 Guardian.storePnpm, Guardian.storeNpm, Guardian.storeSccache, Guardian.storeCargo,
+                 Guardian.reportRuns, Guardian.parkedFiles, Guardian.duplicatedFolders, Guardian.globalStores,
+                 Guardian.balanced, Guardian.keepLonger, Guardian.reclaimSooner,
+                 Guardian.removed, Guardian.couldNotRemove, Guardian.leftAlone].map { ("Guardian", $0) }
         rows += [Overview.scanEverything, Overview.cancelTheRest].map { ("Overview", $0) }
         rows += [Welcome.windowTitle, Welcome.newInThisVersion, Welcome.stepWelcome, Welcome.stepBackground, Welcome.stepGuard,
                  Welcome.stepNotifications, Welcome.stepFullDiskAccess, Welcome.stepTimeMachine, Welcome.stepDone, Welcome.next,

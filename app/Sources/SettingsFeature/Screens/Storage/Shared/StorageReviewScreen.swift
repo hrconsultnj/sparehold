@@ -49,6 +49,11 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
     /// Set when there is nothing to preview yet: Preview is off and says why.
     var previewDisabledReason: String?
     var emptySymbol = "eye"
+    /// A strip a screen draws over its review's age bands (Old Recordings: the
+    /// whole folder per band, each with a Select that ticks exactly that band).
+    /// It gets the rows and the live session — nil for a read-only review,
+    /// which cannot be applied. nil = no strip.
+    var bandSummary: ((StorageRows, ReviewSession?) -> AnyView)? = nil
 
     @Environment(JobStore.self) private var store
     @Environment(Navigator.self) private var navigator
@@ -60,7 +65,8 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
          lastKnownMatches: @escaping @Sendable (WholeRun.Block) -> Bool = { _ in true }, applyTitle: String,
          confirmation: ReviewConfirmation, emptyText: String, emptyTitle: String = "No Preview Yet",
          subtitlePrefix: String? = nil, destination: String? = nil, emptyActions: [ReviewAction] = [],
-         toolbarActions: [ReviewAction] = [], previewDisabledReason: String? = nil, emptySymbol: String = "eye") {
+         toolbarActions: [ReviewAction] = [], previewDisabledReason: String? = nil, emptySymbol: String = "eye",
+         bandSummary: ((StorageRows, ReviewSession?) -> AnyView)? = nil) {
         self.model = model
         self.title = title
         self.kind = kind
@@ -78,6 +84,7 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
         self.toolbarActions = toolbarActions
         self.previewDisabledReason = previewDisabledReason
         self.emptySymbol = emptySymbol
+        self.bandSummary = bandSummary
         let first = Category.allCases.first
         _category = State(initialValue: StorageTab(id: first?.rawValue ?? "", title: first?.title ?? "", symbol: first?.symbol ?? "folder"))
     }
@@ -107,6 +114,16 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
         default: return nil
         }
         return text.isEmpty ? nil : text
+    }
+
+    /// What this cleanup means for the Trash and Undo, one plain line under the
+    /// review's bar, from where the screen says its cleared items go.
+    private var footnote: String? {
+        switch destination {
+        case Names.Review.goesToTrash: Names.Review.trashFootnote
+        case Names.Review.deletedPermanently: Names.Review.permanentFootnote
+        default: nil
+        }
     }
 
     /// The How It Works topic this cleanup is explained in: the help button names it.
@@ -154,7 +171,8 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
             } else {
                 ReviewTable(session: session, preview: model.phase == .lastKnown ? nil : model.job,
                             applyTitle: applyTitle, confirmation: confirmation, readOnly: model.phase == .lastKnown,
-                            note: model.phase == .lastKnown ? "Preview again to review these and apply." : nil,
+                            note: model.phase == .lastKnown ? "Refresh This List to review these and apply." : nil,
+                            footnote: footnote,
                             onPreviewAgain: { startPreview() }, onApplied: { model.trackApplied($0) },
                             only: shownIDs(rows), tabs: filled.map { Set(rows.rows(inTab: $0.rawValue).map(\.id)) },
                             screen: screenKey, rowMenu: .files)
@@ -163,8 +181,15 @@ struct StorageReviewScreen<Category: StorageCategory>: View {
         }
     }
 
-    /// What the preview says that is not a row, as the system's own bar over the table.
+    /// What the preview says that is not a row, as the system's own bar over the table,
+    /// with the running apply's confirmation on top of it when one has been sent.
     @ViewBuilder private var notesStrip: some View {
+        if let bandSummary {
+            bandSummary(model.rows ?? StorageRows([]), model.phase == .ready ? model.session : nil)
+        }
+        if model.appliedJob != nil {
+            ApplyOutcomeStrip(job: model.appliedJob)
+        }
         let notes = model.rows?.notes(forTab: current.rawValue) ?? []
         if detailLine != nil || !notes.isEmpty {
             VStack(alignment: .leading, spacing: 4) {

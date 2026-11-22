@@ -9,8 +9,12 @@ enum StorageRoute: Hashable, Codable, Sendable {
     case fixture(String)
 }
 
-/// Disk, Caches & Builds, Downloads, Temp & Agents and Spotlight. Time Machine and Unused
-/// Apps arrive with their screens.
+/// Disk, Caches & Builds, Downloads, Temp & Agents, Time Machine, Spotlight, Unused
+/// Apps and Old Recordings — ONE sidebar row, Disk: the category pane that surveys
+/// the disk and lists the other seven as its rows. The seven have no sidebar rows of
+/// their own (`inSidebar: false`, like Updates and How It Works): deep links land on
+/// them exactly as before, the Disk pane opens them, and the Storage row stays lit
+/// while any of them is on screen (`SectionRegistry.sidebarSelection`).
 ///
 /// Each cleanup is one screen: Preview in the toolbar, the preview's rows as tabs and groups
 /// in the shared review table, one Apply, History one tap away. A finished run's own screen
@@ -22,6 +26,7 @@ enum StorageGroup {
     static let caches = SectionID("caches")
     static let downloads = SectionID("downloads")
     static let temp = SectionID("temp")
+    static let guardian = SectionID("guardian")
     static let spotlight = SectionID("spotlight")
     static let timeMachine = SectionID("timemachine")
     static let unused = SectionID("unused")
@@ -44,7 +49,10 @@ enum StorageGroup {
          "recordings:fixture": .main(Location(recordings, path: [.storage(.fixture("recordings"))])),
          "recordings:fixture:many": .main(Location(recordings, path: [.storage(.fixture("recordings-many"))])),
          "recordings:empty:none": .main(Location(recordings, path: [.storage(.fixture("recordings-none"))])),
-         "recordings:sources": .main(Location(recordings, path: [.storage(.fixture("recordings-sources"))]))]
+         "recordings:sources": .main(Location(recordings, path: [.storage(.fixture("recordings-sources"))])),
+         "guardian:fixture": .main(Location(guardian, path: [.storage(.fixture("guardian"))])),
+         "guardian:fixture:many": .main(Location(guardian, path: [.storage(.fixture("guardian-many"))])),
+         "guardian:empty:none": .main(Location(guardian, path: [.storage(.fixture("guardian-none"))]))]
     }
 
     private static func log(_ log: EngineLog) -> Route { .overview(.raw(.log(log.rawValue))) }
@@ -53,13 +61,17 @@ enum StorageGroup {
         title: Names.Group.storage,
         rows: [
             SidebarRow(disk, Names.Screen.disk, symbol: "internaldrive", tint: .indigo),
-            SidebarRow(caches, Names.Screen.cachesAndBuilds, symbol: "shippingbox", tint: .indigo),
-            SidebarRow(downloads, Names.Screen.downloads, symbol: "arrow.down.circle", tint: .indigo),
-            SidebarRow(temp, Names.Screen.tempAndAgents, symbol: "tray.full", tint: .indigo),
-            SidebarRow(timeMachine, Names.Screen.timeMachine, symbol: "clock.arrow.circlepath", tint: .indigo),
-            SidebarRow(spotlight, Names.Screen.spotlight, symbol: "magnifyingglass", tint: .indigo),
-            SidebarRow(unused, Names.Screen.unusedApps, symbol: "app.badge.checkmark", tint: .indigo),
-            SidebarRow(recordings, Names.Screen.oldRecordings, symbol: "film", tint: .indigo),
+            // The category's other panes: no row of their own — the Disk pane
+            // lists them, their deep links land here, and the Storage row
+            // highlights while any is open.
+            SidebarRow(caches, Names.Screen.cachesAndBuilds, symbol: "shippingbox", tint: .indigo, inSidebar: false),
+            SidebarRow(downloads, Names.Screen.downloads, symbol: "arrow.down.circle", tint: .indigo, inSidebar: false),
+            SidebarRow(temp, Names.Screen.tempAndAgents, symbol: "tray.full", tint: .indigo, inSidebar: false),
+            SidebarRow(guardian, Names.Screen.guardian, symbol: "shield.lefthalf.filled", tint: .indigo, inSidebar: false),
+            SidebarRow(timeMachine, Names.Screen.timeMachine, symbol: "clock.arrow.circlepath", tint: .indigo, inSidebar: false),
+            SidebarRow(spotlight, Names.Screen.spotlight, symbol: "magnifyingglass", tint: .indigo, inSidebar: false),
+            SidebarRow(unused, Names.Screen.unusedApps, symbol: "app.badge.checkmark", tint: .indigo, inSidebar: false),
+            SidebarRow(recordings, Names.Screen.oldRecordings, symbol: "film", tint: .indigo, inSidebar: false),
         ],
         root: screen,
         aliases: [
@@ -73,6 +85,9 @@ enum StorageGroup {
             "temp": .main(Location(temp)),
             "log:tempSpace": .main(Location(temp, path: [log(.tempSpace)])),
             "actions:tempClean": .main(Location(temp)),
+            "guardian": .main(Location(guardian)),
+            "log:guardian": .main(Location(guardian, path: [log(.guardian)])),
+            "actions:guardian": .main(Location(guardian)),
             "spotlight": .main(Location(spotlight)),
             "log:spotlightAudit": .main(Location(spotlight, path: [log(.spotlightAudit)])),
             "timemachine": .main(Location(timeMachine)),
@@ -98,6 +113,7 @@ enum StorageGroup {
             case "caches": valid = CacheCategory(rawValue: parts[1]) != nil
             case "downloads": valid = DownloadCategory(rawValue: parts[1]) != nil
             case "temp": valid = TempCategory(rawValue: parts[1]) != nil
+            case "guardian": valid = GuardianCategory(rawValue: parts[1]) != nil
             default: return nil
             }
             guard valid else { return nil }
@@ -141,6 +157,11 @@ enum StorageGroup {
                                           current: { _ in nil }).rows
                 }.id(row.id))
             },
+            .guardian: { row in
+                AnyView(StorageResultsView<GuardianCategory>(row: row, kind: .guardian, screenKey: "guardian") { block, results in
+                    GuardianReview.build(lines: block.lines, banner: block.banner, results: results).rows
+                }.id(row.id))
+            },
         ])
 
     @ViewBuilder private static func screen(_ section: SectionID) -> some View {
@@ -149,6 +170,7 @@ enum StorageGroup {
         case caches: CachesScreen()
         case downloads: DownloadsScreen()
         case temp: TempScreen()
+        case guardian: GuardianScreen()
         case spotlight: SpotlightScreen()
         case timeMachine: TimeMachineScreen()
         case unused: UnusedAppsScreen()
@@ -176,6 +198,9 @@ enum StorageGroup {
             case "recordings-many": RecordingsScreen(fixture: StorageFixtures.recordingsMany())
             case "recordings-none": RecordingsScreen(fixtureNoneOn: true)
             case "recordings-sources": RecordingSourcesFixtureScreen()
+            case "guardian": GuardianScreen(fixture: StorageFixtures.guardian())
+            case "guardian-many": GuardianScreen(fixture: StorageFixtures.guardianMany())
+            case "guardian-none": GuardianScreen(fixtureNoneOn: true)
             default: CachesScreen(fixture: StorageFixtures.caches())
             }
         }

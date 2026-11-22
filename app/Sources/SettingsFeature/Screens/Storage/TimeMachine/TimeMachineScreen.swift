@@ -111,27 +111,38 @@ struct TimeMachineScreen: View {
             EmptyState(Names.TimeMachine.nothingToThin, systemImage: "checkmark.circle",
                        description: Text(Names.TimeMachine.nothingToThinDetail))
         } else {
-            OutlineTable(tree, children: \.children, selection: $selection, expanded: expansion.binding, autosave: "timemachine") {
-                OutlineColumn("name", Names.Column.name) { node in
-                    Label {
-                        VStack(alignment: .leading) {
-                            Text(node.title).lineLimit(1)
-                            if let detail = node.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                        }
-                    } icon: { Image(systemName: node.isGroup ? "calendar" : "clock.arrow.circlepath") }
+            // the bands say the WHOLE folder at a glance (every snapshot is in
+            // exactly one), and say plainly what a range can and cannot do here
+            VStack(spacing: 0) {
+                AgeBandSummary(rows: model.rows ?? StorageRows([]), noun: "snapshot",
+                               note: "APFS cannot say how much one snapshot holds, so bands count snapshots and the free-space line is the truth. Thinning acts on every local snapshot at once — macOS allows no smaller range for the one command Sparehold may run.")
+                OutlineTable(tree, children: \.children, selection: $selection, expanded: expansion.binding, autosave: "timemachine") {
+                    OutlineColumn("name", Names.Column.name) { node in
+                        Label {
+                            VStack(alignment: .leading) {
+                                Text(node.title).lineLimit(1)
+                                if let detail = node.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                            }
+                        } icon: { Image(systemName: node.isGroup ? "square.stack.3d.up" : "clock.arrow.circlepath") }
+                    }
+                    .lines { $0.detail == nil ? 1 : 2 }
+                    OutlineColumn("status", "Status", text: { $0.status }).alignment(.trailing).textStyle { _ in .secondary }
+                        .width(min: 96, ideal: 112, max: 160)
                 }
-                .lines { $0.detail == nil ? 1 : 2 }
-                OutlineColumn("status", "Status", text: { $0.status }).alignment(.trailing).textStyle { _ in .secondary }
-                    .width(min: 96, ideal: 112, max: 160)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         }
     }
 
     private var footer: some View {
-        HStack {
-            Text(snapshots == 0 ? "" : "\(snapshots) local \(snapshots == 1 ? "snapshot" : "snapshots")" + (model.rows?.facts.first.map { " · \($0)" } ?? ""))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(snapshots == 0 ? "" : "\(snapshots) local \(snapshots == 1 ? "snapshot" : "snapshots")" + (model.rows?.facts.first.map { " · \($0)" } ?? ""))
+                    .foregroundStyle(.secondary)
+                if snapshots > 0 {
+                    Text(Names.Review.permanentFootnote).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Spacer()
         }
         .barMargin(edge: .bottom)

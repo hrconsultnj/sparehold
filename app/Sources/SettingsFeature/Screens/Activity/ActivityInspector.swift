@@ -9,7 +9,11 @@ import UIComponents
 ///
 ///  - what happened: a line of facts (when, how long, who started it, how it ended);
 ///  - while it runs: the step, Stop, and the live output filling the screen;
-///  - a waiting preview: "Review and Apply", which opens that task's screen;
+///  - a preview this app started: a line about the review (and, when the preview is
+///    old, that the cleanup skips anything that no longer exists), with the live
+///    review in the results slot below — tickable, and applying through the kernel;
+///  - a preview the app cannot apply (discarded, or not started here): why, and
+///    "Refresh This List";
 ///  - the results: the task's own results view if its group supplied one
 ///    (`SidebarGroup.runResults`), otherwise `RunResultsDefault`: the run's categories as
 ///    tabs (with counts) and, inside, its rows grouped under what they belong to, in the
@@ -99,25 +103,70 @@ struct ActivityInspector: View {
     @ViewBuilder private func banners(_ row: ActivityRow, live: Job?) -> some View {
         if let live, live.isActive {
             EmptyView()
-        } else if row.needsReview || (row.intent == .preview && row.findings > 0) {
-            review(row).padding(.horizontal).padding(.bottom, Tokens.Space.m)
         } else if lostItsResults(live) {
             lostResults(row, reason: live?.note).padding(.horizontal).padding(.bottom, Tokens.Space.m)
+        } else if row.intent == .preview, row.findings > 0 {
+            previewBanner(row, live: live).padding(.horizontal).padding(.bottom, Tokens.Space.m)
+        }
+    }
+
+    /// What a finished preview says above its results: it is a live review when this
+    /// app started it and nothing was discarded; an old one is still applied (the
+    /// kernel skips what has gone), and the bar says so; a discarded one, or one this
+    /// app never started, is found-not-applied, with the way forward named.
+    @ViewBuilder private func previewBanner(_ row: ActivityRow, live: Job?) -> some View {
+        if row.needsReview, let live, case .succeeded = live.state {
+            if let expiry = live.reviewExpiry, Date() >= expiry {
+                staleBanner
+            } else {
+                review(row)
+            }
+        } else {
+            refused(row)
+        }
+    }
+
+    /// An older preview's one caution: not a refusal, a note to apply knowingly.
+    private var staleBanner: some View {
+        GroupBox {
+            HStack(spacing: Tokens.Space.xl) {
+                Image(systemName: "clock").foregroundStyle(.secondary)
+                Text(Names.Review.staleWarning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
     private func review(_ row: ActivityRow) -> some View {
-        // waiting only while the app can apply it; an older preview is what it found
         GroupBox {
             HStack(spacing: Tokens.Space.xl) {
-                Image(systemName: row.needsReview ? "eye.fill" : "arrow.clockwise")
-                    .foregroundStyle(row.needsReview ? Tokens.Status.caution.tint : .secondary)
-                Text(row.needsReview
-                     ? "This preview found something and nothing has been changed yet. Review it, untick anything you want kept, then apply."
-                     : "This preview found something, but it can't be applied as it stands: it is older than \(Int(JobStore.reviewWindow / 60)) minutes, or it was discarded, or it wasn't started from this app. Preview again to see what would be cleaned now.")
+                Image(systemName: "eye.fill").foregroundStyle(Tokens.Status.caution.tint)
+                Text("This preview found something and nothing has been changed yet. Review the list below — untick anything you want kept — then apply.")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let target = row.reviewTarget {
-                    Button(row.needsReview ? "Review and Apply" : Names.Review.previewAgain) { navigator.open(target: target) }
+                    Button("Review and Apply") { navigator.open(target: target) }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    /// Why this preview's list cannot be applied from here: it was discarded, or
+    /// there is no reviewed job of this app behind the rows (it ran from Terminal
+    /// or a schedule, or the app has since been quit). The kernel refuses both,
+    /// and the way forward is a fresh preview of the same task.
+    private func refused(_ row: ActivityRow) -> some View {
+        let discarded = row.jobID.map { store.dismissed.contains($0) } ?? false
+        return GroupBox {
+            HStack(spacing: Tokens.Space.xl) {
+                Image(systemName: discarded ? "xmark.circle" : "terminal")
+                    .foregroundStyle(.secondary)
+                Text(discarded
+                     ? "That review was discarded, so it can't be applied from here. Refresh This List to see what would be cleaned now."
+                     : "This run wasn't started from this app, so it can't be applied from here. Refresh This List to see what would be cleaned now.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let target = row.reviewTarget {
+                    Button(Names.Review.previewAgain) { navigator.open(target: target) }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -136,7 +185,7 @@ struct ActivityInspector: View {
         GroupBox {
             HStack(spacing: Tokens.Space.xl) {
                 Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
-                Text("This run finished, but \(Self.lostSentence(reason)) Nothing from it is shown or can be applied. Preview again to see what would be cleaned now.")
+                Text("This run finished, but \(Self.lostSentence(reason)) Nothing from it is shown or can be applied. Refresh This List to see what would be cleaned now.")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let target = row.reviewTarget {
                     Button(Names.Review.previewAgain) { navigator.open(target: target) }

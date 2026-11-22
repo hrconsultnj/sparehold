@@ -121,6 +121,13 @@ func probeStorage(_ which: String, logOverride: String?) -> Never {
             if let why = looksRaw(folder.title) { problems.append("\(folder.project): \"\(folder.title)\" \(why)") }
         }
 
+    case "guardian":
+        guard let run = block(.guardian) else { print("no preview in the log yet"); exit(0) }
+        let review = GuardianReview.build(lines: run.lines, banner: run.banner)
+        print("mode: \(review.mode.title) — \(review.mode.sentence)")
+        print("\(review.rows.rows.count) rows · \(human(review.rows.totalBytes)) · free \(review.freeSpace ?? "?")")
+        problems += printLevels(review.rows, GuardianCategory.self)
+
     case "fixtures":
         print("-- Caches & Builds example"); problems += printLevels(StorageFixtures.caches(), CacheCategory.self)
         print("\n-- Downloads example"); problems += printLevels(StorageFixtures.downloads(), DownloadCategory.self, perGroup: 3, namesAreFiles: true)
@@ -155,6 +162,20 @@ func probeStorage(_ which: String, logOverride: String?) -> Never {
             if named.group != group || named.title != title { problems.append("StorageNaming: \(path) is \"\(named.group)\" / \"\(named.title)\", expected \"\(group)\" / \"\(title)\"") }
         }
         print("\n-- Temp & Agents example"); problems += printLevels(StorageFixtures.temp(), TempCategory.self)
+        print("\n-- Cache Guardian example"); problems += printLevels(StorageFixtures.guardian(), GuardianCategory.self)
+        // the Guardian's rules the examples must show: dirty worktrees are shown but never
+        // offered, the removable rows are paths, and the four tabs all carry rows
+        for fixture in [StorageFixtures.guardian(), StorageFixtures.guardianMany()] {
+            let dirty = fixture.rows.filter { $0.keptReason?.contains("uncommitted changes") == true }
+            if dirty.isEmpty { problems.append("the Guardian example has no dirty-worktree row") }
+            for row in dirty where row.isChoosable { problems.append("the Guardian example offers \"\(row.title)\" although it has uncommitted changes") }
+            for row in fixture.choosable where !(row.id.hasPrefix("/") || row.id.hasPrefix("prune:")) {
+                problems.append("the Guardian example offers \"\(row.title)\" whose key is neither a path nor a prune id: \(row.id)")
+            }
+            for tab in GuardianCategory.allCases where fixture.count(in: tab) == 0 {
+                problems.append("the Guardian example's \(tab.title) tab is empty")
+            }
+        }
         print("\n-- a finished Caches & Builds run (what it did to each row)"); problems += printLevels(StorageFixtures.cachesRun(), CacheCategory.self)
         // an apply's prunes, Docker and snapshot thinning each show what they did
         let ran = StorageFixtures.cachesRun().rows
@@ -183,7 +204,7 @@ func probeStorage(_ which: String, logOverride: String?) -> Never {
         print("  \(outlook.runway.map { "full in \($0.text)" } ?? "no forecast"): \(outlook.reason)")
 
     default:
-        FileHandle.standardError.write(Data("usage: agent-runner --probe-storage <caches|downloads|temp|spotlight|disk> [--log <file>]\n".utf8))
+        FileHandle.standardError.write(Data("usage: agent-runner --probe-storage <caches|downloads|temp|spotlight|guardian|disk> [--log <file>]\n".utf8))
         exit(2)
     }
 

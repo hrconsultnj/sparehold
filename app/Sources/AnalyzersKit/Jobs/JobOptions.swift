@@ -15,8 +15,19 @@ public struct JobOptions: Sendable, Hashable, Codable {
     /// Eject: the mount point inside a temp folder.
     public var mountPoint: String?
 
-    /// Recordings: prune recording folders older than this many days.
+    /// Recordings: the age the SCHEDULED clean prunes from
+    /// (`--recordings-older-than`). 0 is the screen's own value — the preview
+    /// looks at every recording, of every age, so the whole folder's size
+    /// shows and the person picks a range there; the saved setting stays the
+    /// automation's default and is never read by the screen.
     public var recordingsDays = 90
+
+    /// Cache Guardian: a worktree must be idle this many days to be offered.
+    public var worktreeIdleDays = 14
+    /// Cache Guardian: parked local-only files may go once they are this old.
+    public var parkedDays = 30
+    /// Cache Guardian: dated report dirs may go once they are this old.
+    public var reportsDays = 90
 
     /// Memory cleanup: also end busy orphaned tools, not only idle ones
     /// (`--orphans-all`).
@@ -38,7 +49,8 @@ public struct JobOptions: Sendable, Hashable, Codable {
 
     public init(deep: Bool = false, permanent: Bool = false, mountPoint: String? = nil,
                 recordingsDays: Int = 90, scheduleArguments: [String]? = nil,
-                includeBusyOrphans: Bool = false, alsoQuit: [String] = [], startBackup: Bool = true) {
+                includeBusyOrphans: Bool = false, alsoQuit: [String] = [], startBackup: Bool = true,
+                worktreeIdleDays: Int = 14, parkedDays: Int = 30, reportsDays: Int = 90) {
         self.deep = deep
         self.permanent = permanent
         self.mountPoint = mountPoint
@@ -47,5 +59,8 @@ public struct JobOptions: Sendable, Hashable, Codable {
         self.includeBusyOrphans = includeBusyOrphans
         self.alsoQuit = alsoQuit
         self.startBackup = startBackup
+        self.worktreeIdleDays = worktreeIdleDays
+        self.parkedDays = parkedDays
+        self.reportsDays = reportsDays
     }
 }

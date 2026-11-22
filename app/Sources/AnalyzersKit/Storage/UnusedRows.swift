@@ -183,8 +183,9 @@ public enum UnusedReview {
 
     /// The recordings of a `cleanup.sh --recordings-older-than` block. Each source the engine headed with
     /// `### Source<TAB>id<TAB>title<TAB>path` is a tab, typed by that heading and never recovered from a path; inside it
-    /// the recordings are grouped by the day they were made. With one source there is one tab, which the screen does not
-    /// draw; with more than six, the five largest keep a tab and the rest share Other Folders, grouped by source.
+    /// the recordings are grouped by age band — the screen previews every age, so the whole folder's size shows, and
+    /// the day each recording was made moves into the row's detail. With one source there is one tab, which the screen
+    /// does not draw; with more than six, the five largest keep a tab and the rest share Other Folders, grouped by source.
     ///
     /// `info` reads a folder's date (injected so a probe needs no real folders). `catalog` is `lib/recording-sources.tsv`.
     public static func recordings(lines: [String], results: Bool = false, now: Date = Date(),
@@ -253,12 +254,16 @@ public enum UnusedReview {
             let when = made?.date ?? dictated ?? info(path)
             let title = made.map { $0.title(now: now) }
                 ?? dictated.map { "Recording · \($0.formatted(date: .omitted, time: .standard))" } ?? name
-            let group = results ? Names.Unused.recordings : (when.map { day($0, now: now) } ?? Names.Download.dateUnknown)
+            let band = AgeBand(date: when, now: now)
+            let group = results ? Names.Unused.recordings : band.title
+            let made_ = when.map { day($0, now: now) }
             rows.append((owner!.key,
                          StorageRow(id: path, category: owner!.key, group: group, title: title,
-                                    detail: results ? "\(Names.Unused.removed) · \(place(path))" : place(path),
+                                    detail: results ? "\(Names.Unused.removed) · \(place(path))"
+                                        : [made_, place(path)].compactMap { $0 }.joined(separator: " · "),
                                     bytes: bytes, iconPath: results ? nil : path,
-                                    keptReason: isKept ? "Kept: \(keptWhy ?? "it cannot be moved")" : nil),
+                                    keptReason: isKept ? "Kept: \(keptWhy ?? "it cannot be moved")" : nil,
+                                    band: band),
                          bytes))
         }
 
@@ -277,10 +282,10 @@ public enum UnusedReview {
         let final: [StorageRow] = rows.map { entry in
             guard folded.contains(entry.source) else { return entry.row }
             let row = entry.row
-            // inside Other Folders the source is the group, and the day moves to the detail
+            // inside Other Folders the source is the group, and the band and the day move to the detail
             return StorageRow(id: row.id, category: otherFoldersTab, group: titles[entry.source], title: row.title,
                               detail: [row.group, row.detail].compactMap { $0 }.joined(separator: " · "), bytes: row.bytes,
-                              valueText: row.valueText, iconPath: row.iconPath, keptReason: row.keptReason)
+                              valueText: row.valueText, iconPath: row.iconPath, keptReason: row.keptReason, band: row.band)
         }
         return StorageRows(final, notes: Array(NSOrderedSet(array: notes)) as? [String] ?? notes, tabNotes: tabNotes, tabs: tabs)
     }
