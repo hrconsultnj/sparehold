@@ -423,7 +423,7 @@ docker_maint() {
 # ---------- header ----------
 log "=================================================================="
 log " storage-auto-clean.sh  |  mode=${MODE}  |  $([[ $DRY_RUN -eq 1 ]] && echo 'DRY RUN' || echo 'APPLY')  |  ${TS_NOW}"
-log " roots=${ROOTS}  cache>${CACHE_AGE_DAYS}d  nm>${NM_AGE_DAYS}d$([[ "$NM_REQUIRE_CLEAN" == "1" ]] && echo '(clean)' || echo '(any)')  turbo<=${TURBO_MAX_GB}GB  snap-keep=${SNAPSHOT_KEEP_DAYS}d"
+log " roots=${ROOTS}  cache>${CACHE_AGE_DAYS}d  nm>${NM_AGE_DAYS}d$([[ "$NM_REQUIRE_CLEAN" == "1" ]] && echo '(clean)' || echo '(any)')  turbo-sum<=${TURBO_MAX_GB}GB  snap-keep=${SNAPSHOT_KEEP_DAYS}d"
 log " input: ${INVOKED}"
 log "=================================================================="
 
@@ -446,7 +446,10 @@ done
 # outputs, and a Next.js app whose turbo.json doesn't exclude .next/dev adds
 # GBs per build. A deleted entry is only a cache miss on the next build.
 TURBO_MAX_KB=$(( TURBO_MAX_GB * 1048576 ))
-group "1.2 Turborepo cache entries beyond ${TURBO_MAX_GB} GB per repo"
+# The budget is the TOTAL across every repo, not per repo: a thousand caches at
+# 500 MB each fill the disk exactly as one at 500 GB does, so a per-repo cap
+# would never notice. Oldest entries first, across repos, until the sum fits.
+group "1.2 Turborepo caches beyond ${TURBO_MAX_GB} GB in total (oldest first)"
 # A running turbo is tied to its repo by the node_modules path it runs from;
 # one we can't place (a global install) pauses the cap everywhere.
 TURBO_PS="$(ps -axo command= 2>/dev/null | grep -E '(^|/)turbo (run|build|watch|daemon)' || true)"
@@ -455,6 +458,9 @@ turbo_busy() {
   printf '%s\n' "$TURBO_PS" | grep -qF -- "$1/" && return 0
   printf '%s\n' "$TURBO_PS" | grep -qv "/node_modules/"
 }
+# pass 1: every cache entry everywhere, newest of each repo first
+TURBO_ENTRIES="$(mktemp -t turbo-entries)"   # repo<TAB>entry<TAB>kb
+turbo_total_kb=0; turbo_repos=0; turbo_last_repo=""
 for root in $ROOTS; do
   [[ -d "$root" ]] || continue
   while IFS= read -r cdir; do
@@ -464,16 +470,31 @@ for root in $ROOTS; do
     if turbo_busy "$trepo"; then log "  (turbo is running in ${trepo} — its cache left alone this run)"; continue; fi
     entries=( "$cdir"/*.tar.zst "$cdir"/*.tar.gz )
     [[ ${#entries[@]} -gt 0 ]] || continue   # never hand ls an empty list
-    kept=0
-    # newest first: keep entries until the cap, reclaim the rest
+    turbo_repos=$((turbo_repos + 1))
     while IFS= read -r entry; do
       kb=$(du -sk "$entry" 2>/dev/null | cut -f1); kb="${kb:-0}"
-      if (( kept + kb <= TURBO_MAX_KB )); then kept=$((kept + kb)); continue; fi
-      reclaim "$entry"
-      [[ "$DRY_RUN" -eq 0 && ! -e "$entry" ]] && rm -f "${entry%.tar.*}-meta.json"
+      turbo_total_kb=$((turbo_total_kb + kb))
+      printf '%s\t%s\t%s\n' "$trepo" "$entry" "$kb" >> "$TURBO_ENTRIES"
     done < <(ls -t "${entries[@]}")
   done < <(find "$root" "${WS_PRUNE[@]}" -type d -path "*/.turbo/cache" -prune -print 2>/dev/null)
 done
+log "  turborepo caches: $(human "$turbo_total_kb") across ${turbo_repos} repo(s) — budget ${TURBO_MAX_GB} GB"
+# pass 2: keep newest entries until the total fits the budget, reclaim the rest
+if (( turbo_total_kb <= TURBO_MAX_KB )); then
+  log "  (within budget — nothing reclaimed)"
+else
+  kept=0
+  while IFS=$'\t' read -r trepo entry kb; do
+    [[ -n "$entry" ]] || continue
+    if turbo_busy "$trepo"; then kept=$((kept + kb)); continue; fi
+    if (( kept + kb <= TURBO_MAX_KB )); then kept=$((kept + kb)); continue; fi
+    reclaim "$entry"
+    turbo_total_kb=$((turbo_total_kb - kb))
+    [[ "$DRY_RUN" -eq 0 && ! -e "$entry" ]] && rm -f "${entry%.tar.*}-meta.json"
+  done < <(cat "$TURBO_ENTRIES")
+  rm -f "$TURBO_ENTRIES"
+  log "  turborepo total after reclaim: $(human "$turbo_total_kb")"
+fi
 
 # ---------- 1.5 Extra cache globs from config (both modes) ----------
 # App-generated per-project caches outside ~/Projects (set

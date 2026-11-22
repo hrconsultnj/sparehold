@@ -75,7 +75,7 @@ extension HowItWorksFacts {
         var does: [String] = []
         if extending == nil {
             does += ["removes build folders (.next, .turbo, dist, build and the like) that nothing has written to for \(days(Int(line.value(after: "--cache-age-days") ?? "") ?? 3))",
-                     "trims each project's Turborepo cache to \(turboCacheMaxGB) GB"]
+                     "trims the Turborepo caches to \(turboCacheMaxGB) GB in total, oldest entries first"]
         }
         let dailyCaches = toolCaches.filter { Self.dailyToolCaches.contains($0) }.count
         let caches = deep ? toolCaches.count : dailyCaches
