@@ -120,6 +120,14 @@ trap 'rm -f "$notes"' EXIT
     inside && /^[[:space:]]*[-*][[:space:]]/ { started = 1 }
     inside && started { print }
   ' CHANGELOG.md | sed -E '/^[[:space:]]*<!--[[:space:]]*wn:.*-->[[:space:]]*$/d; s/[[:space:]]*<!--[[:space:]]*wn:.*-->[[:space:]]*$//'
+  # the minimum macOS this build requires, as a comment GitHub hides (lib/min-macos.sh):
+  # the app reads it back and never offers this beta to a Mac that cannot launch it
+  if [[ -f "$root/lib/min-macos.sh" ]]; then
+    # shellcheck source=../lib/min-macos.sh
+    source "$root/lib/min-macos.sh"
+    sparehold_min_macos_line
+    echo
+  fi
 } > "$notes"
 if ! grep -qE '^[[:space:]]*[-*][[:space:]]' "$notes"; then
   echo "cut-beta: '## Next' in CHANGELOG.md has no notes yet — a beta needs something to say. Nothing was changed." >&2
