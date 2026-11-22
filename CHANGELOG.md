@@ -9,6 +9,7 @@ GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
 ## v3.5.0 — Everything You See, You Can Act On
+<!-- wn: released=2026-11-22 -->
 
 This release turns looking into doing. A finished preview is a live review you can act from, the Undo screen agrees with the real Trash, Time Machine deletes snapshots by age, the sidebar reads by intent, and the lessons explain themselves with your Mac's own numbers.
 
