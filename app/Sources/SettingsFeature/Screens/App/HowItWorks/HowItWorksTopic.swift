@@ -28,8 +28,8 @@ enum HowItWorksTab: String, CaseIterable, Hashable, Sendable {
 enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
     case measures, guardSteps, guardNever, rowLocks, cleanup
     case safeToRemove, downloadsTemp, timeMachine, unusedApps, oldRecordings
-    case loginItems, network
-    case whereWritten, editByHand, healthReport, privacy
+    case loginItems, network, askAgent
+    case whereWritten, editByHand, healthReport, privacy, trashVsUndo
 
     var id: String { rawValue }
 
@@ -37,8 +37,8 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         switch self {
         case .measures, .guardSteps, .guardNever, .rowLocks, .cleanup: .memory
         case .safeToRemove, .downloadsTemp, .timeMachine, .unusedApps, .oldRecordings: .storage
-        case .loginItems, .network: .system
-        case .whereWritten, .editByHand, .healthReport, .privacy: .yourData
+        case .loginItems, .network, .askAgent: .system
+        case .whereWritten, .editByHand, .healthReport, .privacy, .trashVsUndo: .yourData
         }
     }
 
@@ -56,10 +56,12 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         case .oldRecordings: Names.HowItWorks.oldRecordings
         case .loginItems: Names.HowItWorks.loginItems
         case .network: Names.HowItWorks.network
+        case .askAgent: Names.HowItWorks.askAgent
         case .whereWritten: Names.HowItWorks.whereWritten
         case .editByHand: Names.HowItWorks.editByHand
         case .healthReport: Names.HowItWorks.healthReport
         case .privacy: Names.HowItWorks.privacy
+        case .trashVsUndo: Names.HowItWorks.trashVsUndo
         }
     }
 
@@ -77,10 +79,12 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         case .oldRecordings: "film"
         case .loginItems: "person.crop.circle.badge.questionmark"
         case .network: "network"
+        case .askAgent: "sparkles"
         case .whereWritten: "doc.text"
         case .editByHand: "slider.horizontal.3"
         case .healthReport: "heart.text.square"
         case .privacy: "lock.shield"
+        case .trashVsUndo: "arrow.uturn.backward.circle"
         }
     }
 
@@ -93,18 +97,35 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
     }
 }
 
-/// What a topic's screen says, written with this Mac's numbers.
+/// What a topic's screen says, written with this Mac's numbers. A topic is a small lesson: what the thing is, why it
+/// matters on this Mac (the real numbers), what it never does, the actions waiting on the screens it explains, and one
+/// common question answered.
 struct TopicContent {
-    struct Button: Identifiable {
+    /// One named action, as a row: where it leads and what waits there, in the screen's own words.
+    struct Action: Identifiable {
         let title: String
+        let detail: String
         let target: String
         var id: String { title }
     }
 
+    /// The one common question the topic answers.
+    struct Question {
+        let ask: String
+        let answer: String
+    }
+
     /// The one sentence on the topic's row in the list, with this Mac's number in it.
     var summary: String
+    /// What this thing is, in one plain sentence a non-developer understands. It opens the lesson.
+    var what: String?
+    /// How it works, in sentences a person can act on.
     var does: [String] = []
+    /// Why it matters on this Mac: only sentences that quote a figure this Mac's readings produced.
+    var onThisMac: [String] = []
     var never: [String] = []
     var written: [String] = []
-    var buttons: [Button] = []
+    /// The named actions available, each deep-linking to the exact screen (or screen and tab) that offers it.
+    var actions: [Action] = []
+    var question: Question?
 }

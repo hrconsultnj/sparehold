@@ -86,14 +86,14 @@ struct RecordingSourcesForm: View {
             if !draft.offered.isEmpty {
                 Section(Names.Recordings.foundOnThisMac) {
                     ForEach(draft.offered) { source in
-                        RecordingSourceRow(source: source, found: found[source.id], previewed: previewed, days: draft.days,
+                        RecordingSourceRow(source: source, found: found[source.id], previewed: previewed,
                                            isOn: draft.binding(for: source), onLook: { draft.look(in: $0) })
                     }
                 }
             }
             Section {
                 ForEach(draft.custom) { source in
-                    RecordingSourceRow(source: source, found: found[source.id], previewed: previewed, days: draft.days,
+                    RecordingSourceRow(source: source, found: found[source.id], previewed: previewed,
                                        isOn: draft.binding(for: source), onRemove: { draft.remove(source) },
                                        onLook: { draft.look(in: $0) })
                 }
@@ -118,7 +118,7 @@ struct RecordingSourcesForm: View {
                     ForEach(RecordingSourcesStore.dayChoices, id: \.self) { Text("\($0) days").tag($0) }
                 }
             } footer: {
-                Text("Only recordings older than this are offered for a clean-up, and you review them first.")
+                Text("The scheduled clean offers recordings older than this, and you review them first. The Old Recordings screen shows recordings of every age; you pick a range there without changing this.")
             }
         }
         .formStyle(.grouped)

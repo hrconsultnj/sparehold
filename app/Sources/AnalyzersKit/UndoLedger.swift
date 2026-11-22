@@ -115,6 +115,12 @@ public enum UndoLedger {
         ledgers.flatMap { trashedItems(in: $0.url, source: $0.source) }
     }
 
+    /// The same list, judged against a named Trash (the app passes the real
+    /// one; a test passes its own fixture folder).
+    public static func trashedItems(trash: URL) -> [TrashedItem] {
+        ledgers.flatMap { trashedItems(in: $0.url, source: $0.source, trash: trash) }
+    }
+
     @_spi(TestSupport) public static func trashedItems(in ledger: URL, source: String,
                                                        trash: URL = UndoLedger.trashDir) -> [TrashedItem] {
         trashedItems(in: ledger, source: source, trash: trash, volumes: .system)

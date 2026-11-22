@@ -57,7 +57,7 @@ struct RunRowActions {
             if row.needsReview {
                 Button("Review") { review(row) }
             } else if row.intent == .preview, row.findings > 0 {
-                Button("Preview Again") { review(row) }
+                Button(Names.Review.previewAgain) { review(row) }
             }
         }
         if let target = row.ownerTarget, row.route != nil {

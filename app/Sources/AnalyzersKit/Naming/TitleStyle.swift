@@ -24,6 +24,7 @@ public enum TitleStyle {
     public static let smallWords: Set<String> = [
         "a", "an", "the", "and", "but", "or", "nor", "for", "yet", "so", "as", "to",
         "of", "at", "by", "with", "from", "per", "via", "into", "onto", "over", "upon", "than",
+        "vs",   // the comparison in a title reads lowercase ("Trash vs Undo")
     ]
 
     /// Allowed in either case in the middle of a name (phrasal verbs).

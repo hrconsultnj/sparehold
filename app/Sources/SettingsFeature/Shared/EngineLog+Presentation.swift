@@ -16,6 +16,7 @@ extension EngineLog {
         case .memoryClean: "memorychip"
         case .reclaim: "arrow.counterclockwise.circle"
         case .storageClean: "internaldrive"
+        case .guardian: "shield.lefthalf.filled"
         case .janitor: "trash"
         case .tempSpace: "tray.full"
         case .persistence: "person.badge.key"
@@ -34,6 +35,7 @@ extension EngineLog {
         case .memoryClean: .teal
         case .reclaim: .cyan
         case .storageClean: .indigo
+        case .guardian: .indigo
         case .janitor: .orange
         case .tempSpace: .mint
         case .persistence: .red

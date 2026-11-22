@@ -11,42 +11,60 @@ extension HowItWorksTopic {
             let daily = GuardControl.storageCleanLabel, deep = GuardControl.storageDeepLabel
             let scheduledDaily = f.storageCleanDoes(daily) ?? f.notScheduled(daily)
             let scheduledDeep = f.storageCleanDoes(deep) ?? f.notScheduled(deep)
-            var does: [String] = []
+            var onThisMac: [String] = []
             if let free = f.freeDisk, let total = f.totalDisk {
-                does.append("Your startup disk has \(free) free of \(total).\(f.runway.map { " At your current pace the disk fills in \($0)." } ?? "")")
+                onThisMac.append("Your startup disk has \(free) free of \(total).\(f.runway.map { " At your current pace the disk fills in \($0)." } ?? "")")
             }
-            does.append("\(Names.Screen.cachesAndBuilds) finds what your tools can make again: build caches, the dependency folders of projects you have not touched for \(f.days(f.nodeModulesDays))\(f.nodeModulesNeedClean ? ", and only when they have no unsaved changes" : ""), and package-manager caches.\(f.logsRead ? (f.week.reclaimableBytes.map { " The latest preview found \(ByteSize.text($0, .headline)) you could take back." } ?? " Nothing is waiting from a preview.") : "")")
-            does.append("When you start a cleanup yourself it is a preview first: you see what would be removed and untick anything you want kept, and only then does Apply start. Caches and build folders are deleted for good, because your tools make them again, so Undo cannot bring them back.")
-            does.append("The cleanups that run by themselves do not wait for you. \(scheduledDaily)")
-            does.append(scheduledDeep)
-            does.append("Change when they run in \(Names.Group.settings) › \(Names.Screen.schedule). The background jobs are switched off only all together, in \(Names.Screen.setup) › \(Names.Screen.turnOff).")
-            if f.logsRead { does.append("In the last 7 days, \(f.week.cleanRuns) cleanups freed \(ByteSize.text(f.week.storageFreedBytes, .headline)).") }
+            if f.logsRead {
+                onThisMac.append(f.week.reclaimableBytes.map { "The latest preview found \(ByteSize.text($0, .headline)) you could take back." }
+                                    ?? "Nothing is waiting from a preview.")
+                onThisMac.append("In the last 7 days, \(f.week.cleanRuns) cleanups freed \(ByteSize.text(f.week.storageFreedBytes, .headline)).")
+            }
             var summary = [f.freeDisk.flatMap { free in f.totalDisk.map { "\(free) free of \($0)." } }].compactMap { $0 }.joined()
             if f.logsRead { summary += (summary.isEmpty ? "" : " ") + "\(f.week.cleanRuns) cleanups this week." }
             return TopicContent(
                 summary: summary.isEmpty ? "What can be removed, and what runs by itself." : summary,
-                does: does,
+                what: "Your tools keep folders they can make again — build caches, dependency folders, build output — so clearing them frees space without losing anything you made.",
+                does: [
+                    "\(Names.Screen.cachesAndBuilds) finds what your tools can make again: build caches, the dependency folders of projects you have not touched for \(f.days(f.nodeModulesDays))\(f.nodeModulesNeedClean ? ", and only when they have no unsaved changes" : ""), and package-manager caches.",
+                    "When you start a cleanup yourself it is a preview first: you see what would be removed and untick anything you want kept, and only then does Apply start. Caches and build folders are deleted for good, because your tools make them again, so Undo cannot bring them back.",
+                    "The cleanups that run by themselves do not wait for you. \(scheduledDaily)",
+                    scheduledDeep,
+                    "Change when they run in \(Names.Group.settings) › \(Names.Screen.schedule). The background jobs are switched off only all together, in \(Names.Screen.setup) › \(Names.Screen.turnOff).",
+                ],
+                onThisMac: onThisMac,
                 never: [
                     "Build folders are removed only when nothing has written to them for days, and a project that something live runs from is left alone.",
                     "A cleanup you start yourself never removes anything you have not reviewed in a preview.",
                 ],
                 written: ["Each run writes a full report and appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                buttons: [.init(title: "Open \(Names.Screen.cachesAndBuilds)", target: "caches"),
-                          .init(title: Names.HowItWorks.change, target: "schedule")])
+                actions: [.init(title: "Open \(Names.Screen.cachesAndBuilds)", detail: "Find What to Clean — the preview lists what your tools can make again, you untick anything you want kept",
+                                target: "caches"),
+                          .init(title: "Open \(Names.Screen.disk)", detail: "See where the space is, and preview every cleanup at once",
+                                target: "disk"),
+                          .init(title: Names.HowItWorks.change, detail: "Choose when the scheduled cleanups run", target: "schedule")],
+                question: .init(ask: "I cleaned, but Finder still shows the disk nearly full. Where is my space?",
+                                answer: "Freed space can sit inside Time Machine's local snapshots until they thin — macOS holds it for a while in case you want it back. Open \(Names.Screen.timeMachine) to thin them now; the space appears in Finder once they are gone."))
 
         case .downloadsTemp:
             return TopicContent(
                 summary: "Downloads older than \(f.days(f.downloadsDays)), screenshots older than \(f.days(f.screenshotsDays)).",
+                what: "Two cleanups tidy the places that fill up by themselves: your Downloads folder, and the temporary folders your Mac, your coding agents and your download tools leave behind.",
                 does: [
                     "\(Names.Screen.downloads) looks for files you have not changed for \(f.days(f.downloadsDays)), and for screenshots older than \(f.days(f.screenshotsDays)). You review them in a preview; what you apply goes to the Trash, and Undo puts it back.",
                     "\(Names.Screen.tempAndAgents) clears temporary files that have been idle for \(f.hours(f.tempIdleHours)), scratch folders of coding agents idle for \(f.days(f.tempAgentScratchDays)), and tool downloads idle for \(f.days(f.tempToolDownloadDays)). It also shows a preview first, and what you apply goes to the Trash.",
                     "Neither of these has a schedule of its own: they run when you start them.",
                     "macOS also clears /tmp by itself every night: files nobody has touched for three days. It skips mounted disk images and anything still in use.",
                 ],
+                onThisMac: [],
                 never: ["Anything that is open, in use, owned by someone else, or a mounted disk image you have not approved is never touched."],
                 written: ["Each run writes a report and appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                buttons: [.init(title: "Open \(Names.Screen.downloads)", target: "downloads"),
-                          .init(title: "Open \(Names.Screen.tempAndAgents)", target: "temp")])
+                actions: [.init(title: "Open \(Names.Screen.downloads)", detail: "Find old files and screenshots, and choose what goes to the Trash",
+                                target: "downloads"),
+                          .init(title: "Open \(Names.Screen.tempAndAgents)", detail: "Find idle temporary files, agent scratch folders and tool downloads",
+                                target: "temp")],
+                question: .init(ask: "Are the files gone for good?",
+                                answer: "No. What you apply goes to the Trash, and Undo lists it so you can put it back exactly where it was — see \(Names.HowItWorks.trashVsUndo)."))
 
         case .timeMachine:
             let deep = GuardControl.storageDeepLabel
@@ -61,35 +79,52 @@ extension HowItWorksTopic {
                 : "You have not given that permission on this Mac yet, so Sparehold will ask the first time you delete snapshots yourself."
             return TopicContent(
                 summary: f.timeMachinePermission ? "Permission given on this Mac." : "Needs a one-time permission.",
+                what: "While Time Machine backs up, macOS keeps hourly copies of your files on this Mac itself — local snapshots, invisible in Finder — so a file you deleted this morning can still be brought back. They use disk space.",
                 does: [
-                    "While Time Machine backs up, macOS keeps hourly snapshots on this Mac, and they use disk space. The \(Names.Screen.timeMachine) screen lists them so you can delete the ones you do not need.",
+                    "The \(Names.Screen.timeMachine) screen lists every local snapshot on this Mac, of every age, grouped into bands — under 7 days, 7 to 30, 30 to 90, older — so the whole folder is in front of you, not just the newest hourlies.",
+                    "APFS cannot say how much space one snapshot holds, so the screen counts them, and the free-space figure before and after a delete is the honest number.",
                     "Deleting snapshots needs a one-time permission, with your administrator password, for exactly one command. After that, any program running on your account can delete local snapshots without asking, and nothing else is allowed. \(permission)",
                 ] + (byItself.isEmpty ? [] : [byItself]),
+                onThisMac: [],
                 never: ["Sparehold never touches your backups on the backup disk. It only deletes local snapshots on this Mac, and when you delete them yourself, only after you confirm."],
                 written: ["The permission is one small file. You can remove it from the \(Names.Screen.timeMachine) screen or from Setup."],
-                buttons: [.init(title: "Open \(Names.Screen.timeMachine)", target: "timemachine")])
+                actions: [.init(title: "Open \(Names.Screen.timeMachine)", detail: "Thin local snapshots now — see the list, confirm, and the space goes back to Finder",
+                                target: "timemachine")],
+                question: .init(ask: "I cleaned, but Finder shows no change — where is the freed space?",
+                                answer: "The snapshots are holding it. Time Machine's local snapshots keep the space until they thin, which is why Finder can stay full after a cleanup. Open \(Names.Screen.timeMachine) to thin now."))
 
         case .unusedApps:
             return TopicContent(
                 summary: "Apps you have not opened in a long time, shown for you to decide.",
+                what: "An app you have not opened in months still holds its place on disk. This screen lists the apps macOS has no record of you using, and you choose what to move.",
                 does: [
                     "\(Names.Screen.unusedApps) lists apps you have never opened or have not opened in a long time, using what macOS recorded about their use. Apps with no record of use are listed separately, since not knowing is not the same as not using.",
                     "You choose what to move. It goes to the Trash, and Undo puts it back.",
                 ],
+                onThisMac: [],
                 never: ["Apps that are running now are left alone, and nothing is moved without your review. It has no schedule of its own."],
                 written: ["Each run appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                buttons: [.init(title: "Open \(Names.Screen.unusedApps)", target: "unused")])
+                actions: [.init(title: "Open \(Names.Screen.unusedApps)", detail: "See which apps you have not opened lately, and preview what moving one would clear",
+                                target: "unused")],
+                question: .init(ask: "If I move an app out and want it back, do I lose anything?",
+                                answer: "No. Moving to the Trash does not touch the app's settings, and Undo puts it back where it was with its preferences intact."))
 
         case .oldRecordings:
             return TopicContent(
-                summary: "Recordings older than \(f.days(f.recordingsDays)), in the folders you choose.",
+                summary: "Every recording in the folders you choose, banded by age; the scheduled clean uses \(f.days(f.recordingsDays)).",
+                what: "Recordings pile up where your tools save them — Zoom, screen recordings, voice memos. This screen looks in the folders you choose and shows recordings of EVERY age, grouped into bands: under 7 days, 7 to 30, 30 to 90, older.",
                 does: [
-                    "\(Names.Screen.oldRecordings) looks through the folders where you keep recordings (Zoom, screen recordings, voice memos and the like; you choose them with Sources on its screen) for ones older than \(f.days(f.recordingsDays)).",
-                    "You review a preview, and what you apply goes to the Trash, and Undo puts it back.",
+                    "\(Names.Screen.oldRecordings) looks through the folders where you keep recordings (Zoom, screen recordings, voice memos and the like; you choose them with Sources on its screen) and lists everything in them, with its size, in age bands — so the whole folder's size is in front of you.",
+                    "Select a band — say, everything older than 7 days — or tick single recordings, review the list, and apply: only what you reviewed moves, to the Trash, and Undo puts it back.",
+                    "The scheduled clean is separate: it offers recordings older than \(f.days(f.recordingsDays)) (the age in Sources), for the same kind of review. Choosing a range on the screen never changes that setting.",
                 ],
+                onThisMac: [],
                 never: ["Nothing is removed without a preview you reviewed, and it has no schedule of its own."],
                 written: ["Each run appears in Activity (see \(Names.HowItWorks.whereWritten))."],
-                buttons: [.init(title: "Open \(Names.Screen.oldRecordings)", target: "recordings")])
+                actions: [.init(title: "Open \(Names.Screen.oldRecordings)", detail: "See every recording by age band, select a range or single rows, and untick anything you want kept",
+                                target: "recordings")],
+                question: .init(ask: "Can I clear just one range — say, everything older than 7 days?",
+                                answer: "Yes. Select the bands past that line (or tick rows one by one), review what the bar says will move, and apply. The saved age limit only decides what the scheduled clean offers; this screen never reads it."))
         default:
             return TopicContent(summary: "")
         }

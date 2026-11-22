@@ -36,6 +36,31 @@ struct TimeMachineScreen: View {
 
     /// Whether a backup starts after deleting: the preview's own setting once there is one, else the person's pick.
     private var backup: Bool { model.setting(kind: .tmReclaim, chosen: JobOptions(startBackup: chosenBackup ?? true)).startBackup }
+
+    /// Delete one band's snapshots by their date: a preview (to see them) then an
+    /// apply of the whole band, through the same tracked jobs as everything else.
+    /// macOS's own snapshots are never named by the engine's range.
+    private var bandDelete: (AgeBand) -> (title: String, act: () -> Void) {
+        { band in
+            guard let olderThan = band.olderThanDays else {
+                return (title: "Delete All Older", act: {})
+            }
+            return (title: "Delete Older Than \(olderThan)d", act: {
+                Task {
+                    let preview = store.enqueue(
+                        JobRequest(kind: .tmReclaim, intent: .preview,
+                                   options: JobOptions(startBackup: false, tmOlderThan: olderThan)),
+                        trigger: .user)
+                    while !preview.state.isFinished { try? await Task.sleep(for: .milliseconds(40)) }
+                    guard case .succeeded = preview.state else { return }
+                    let applied = store.apply(from: preview, approved: .everything)
+                    while !applied.state.isFinished { try? await Task.sleep(for: .milliseconds(40)) }
+                    await model.load(kind: .tmReclaim, parse: Self.parse, reviewRow: { $0.reviewRow })
+                }
+            })
+        }
+    }
+
     private var words: CleanWords { model.words(kind: .tmReclaim, chosen: JobOptions(startBackup: chosenBackup ?? true)) }
     private var snapshots: Int { model.rows?.rows.filter(\.isChoosable).count ?? 0 }
     private var canThin: Bool { model.phase == .ready && snapshots > 0 && allowed && applied == nil }
@@ -111,27 +136,39 @@ struct TimeMachineScreen: View {
             EmptyState(Names.TimeMachine.nothingToThin, systemImage: "checkmark.circle",
                        description: Text(Names.TimeMachine.nothingToThinDetail))
         } else {
-            OutlineTable(tree, children: \.children, selection: $selection, expanded: expansion.binding, autosave: "timemachine") {
-                OutlineColumn("name", Names.Column.name) { node in
-                    Label {
-                        VStack(alignment: .leading) {
-                            Text(node.title).lineLimit(1)
-                            if let detail = node.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                        }
-                    } icon: { Image(systemName: node.isGroup ? "calendar" : "clock.arrow.circlepath") }
+            // the bands say the WHOLE folder at a glance (every snapshot is in
+            // exactly one), and say plainly what a range can and cannot do here
+            VStack(spacing: 0) {
+                AgeBandSummary(rows: model.rows ?? StorageRows([]), noun: "snapshot",
+                               note: "APFS cannot say how much one snapshot holds, so bands count snapshots and the free-space line is the truth. Delete acts on one band's snapshots by their date; Thinning acts on every local snapshot at once.",
+                               onBandAction: allowed ? bandDelete : nil)
+                OutlineTable(tree, children: \.children, selection: $selection, expanded: expansion.binding, autosave: "timemachine") {
+                    OutlineColumn("name", Names.Column.name) { node in
+                        Label {
+                            VStack(alignment: .leading) {
+                                Text(node.title).lineLimit(1)
+                                if let detail = node.detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                            }
+                        } icon: { Image(systemName: node.isGroup ? "square.stack.3d.up" : "clock.arrow.circlepath") }
+                    }
+                    .lines { $0.detail == nil ? 1 : 2 }
+                    OutlineColumn("status", "Status", text: { $0.status }).alignment(.trailing).textStyle { _ in .secondary }
+                        .width(min: 96, ideal: 112, max: 160)
                 }
-                .lines { $0.detail == nil ? 1 : 2 }
-                OutlineColumn("status", "Status", text: { $0.status }).alignment(.trailing).textStyle { _ in .secondary }
-                    .width(min: 96, ideal: 112, max: 160)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         }
     }
 
     private var footer: some View {
-        HStack {
-            Text(snapshots == 0 ? "" : "\(snapshots) local \(snapshots == 1 ? "snapshot" : "snapshots")" + (model.rows?.facts.first.map { " · \($0)" } ?? ""))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(snapshots == 0 ? "" : "\(snapshots) local \(snapshots == 1 ? "snapshot" : "snapshots")" + (model.rows?.facts.first.map { " · \($0)" } ?? ""))
+                    .foregroundStyle(.secondary)
+                if snapshots > 0 {
+                    Text(Names.Review.permanentFootnote).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Spacer()
         }
         .barMargin(edge: .bottom)

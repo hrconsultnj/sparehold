@@ -22,6 +22,7 @@ extension JobKind {
         case .loginItems: "person.badge.key"
         case .unusedApps: "app.dashed"
         case .recordings: "waveform"
+        case .guardian: "shield.lefthalf.filled"
         case .networkSnapshot: "network"
         case .memoryReport, .storageReport: "doc.text.magnifyingglass"
         case .installAgents, .uninstallAgents: "clock.badge.checkmark"
@@ -42,6 +43,7 @@ extension JobKind {
         case .loginItems: .brown
         case .unusedApps: .pink
         case .recordings: .red
+        case .guardian: .indigo
         case .networkSnapshot: .purple
         case .memoryReport, .storageReport: .purple
         case .installAgents, .uninstallAgents, .sudoersInstall: .gray

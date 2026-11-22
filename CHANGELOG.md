@@ -8,6 +8,23 @@ bullet as a feature of its own, so every bullet ends with a short tag that
 GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
+## v3.5.0 — Everything You See, You Can Act On
+<!-- wn: released=2026-11-22 -->
+
+This release turns looking into doing. A finished preview is a live review you can act from, the Undo screen agrees with the real Trash, Time Machine deletes snapshots by age, the sidebar reads by intent, and the lessons explain themselves with your Mac's own numbers.
+
+- The menu-bar panel never installs anything itself: an available update is a star that opens Updates, and the version sits beside it as plain text. <!-- wn: open=update icon=star.fill title="Updates Stay on the Updates Screen" -->
+- The Disk screen explains in the app's own voice why cleaned space can stay invisible — Time Machine's local snapshots hold it — with a shortcut to thin them now. <!-- wn: open=ask icon=sparkles title="Why Freed Space Lags Behind" -->
+- The Guardian's worktree cleanup checks each tree against the fingerprint its preview recorded: anything that changed since the review — tracked or ignored — is left alone for a fresh preview, and an apply with no preview in this app removes nothing. <!-- wn: open=- icon=wrench title="Reviewed Trees Only" -->
+- When a Codex session refuses a pinned model, the failure now carries the fix: update the CLI, and the model follows the subscription. <!-- wn: open=- icon=wrench title="Codex Model Pin Fixed" -->
+- The Turborepo budget is one total across every repo: the trim runs oldest entries first, across all of them, until the sum fits your setting — because a thousand small caches fill a disk as surely as one giant one. <!-- wn: open=- icon=wrench title="One Budget, Every Repo" -->
+- The sidebar reads by intent: Storage folds into its Disk hub with the panes behind it, Reports sits with History, and a section you have hidden keeps its deep link working and stays lit while it is open. <!-- wn: open=- icon=wrench title="A Sidebar That Reads Like Intent" -->
+- Time Machine shows its local snapshots by age band, and each band carries its own Delete button — removing everything older than a week is one tap that never touches your standing retention setting. <!-- wn: open=timemachine icon=clock.arrow.circlepath title="Delete Snapshots by Age" -->
+- A finished preview is now a live review: tick what you want, press Clean Selected Now, and a running confirmation shows the work is underway — the old preview dead end is gone. <!-- wn: open=- icon=wrench title="Previews You Can Act On" -->
+- The Undo screen reconciles against the real Trash: each cleanup opens its own nested screen whose rows say restorable, emptied or expired, so the screen never contradicts itself. <!-- wn: open=- icon=wrench title="Undo Tells the Truth" -->
+- Engine tiles load each vendor's real icon when its app or command is on your disk — Anthropic and OpenAI fall back to their name's initials, and nothing is invented. <!-- wn: open=ask icon=cpu title="Real Icons for Real Engines" -->
+- Every How It Works topic is a short lesson — what it does, why it matters on this Mac, what you can do, and one common question — written with your Mac's own numbers. <!-- wn: open=- icon=wrench title="How It Works, Taught Properly" -->
+
 ## v3.4.0 — The Machinery Speaks in Its Own Voice
 <!-- wn: released=2026-11-21 -->
 
@@ -16,7 +33,6 @@ A chat has three voices — yours, the agent's, and the app's — and Ask shows 
 - System messages get their own rows with Sparehold's icon: when the scan finishes and the report is ready, the app says so in its own voice, never as if the agent or you had said it. The standing "nothing has been changed yet" line is one of these. <!-- wn: open=ask icon=sparkles title="The App Speaks for Itself" -->
 - Every agent reply carries its engine's tile beside the engine and model's name — the on-device model, Claude Code, or Codex — with no invented logos for anyone. <!-- wn: open=ask icon=cpu title="Named Engines, No Pretenders" -->
 
-## v3.3.0 — Ask That Shows Its Work
 ## v3.3.0 — Ask That Shows Its Work
 <!-- wn: released=2026-11-21 -->
 

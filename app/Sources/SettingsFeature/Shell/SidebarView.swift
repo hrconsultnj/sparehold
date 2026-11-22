@@ -49,7 +49,7 @@ struct SidebarView: View {
     }
 
     private var selection: Binding<SectionID?> {
-        Binding(get: { navigator.section },
+        Binding(get: { SectionRegistry.sidebarSelection(for: navigator.section) },
                 set: { if let section = $0 { navigator.select(section) } })
     }
 

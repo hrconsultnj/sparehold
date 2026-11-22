@@ -32,16 +32,21 @@ extension MenuContentView {
                     .labelStyle(.iconOnly)
             }
             .help("Open Settings")
+            // one left-aligned group: destinations, the update star, then the
+            // version — the actions (Restart, Quit) sit alone on the right
             if updates.offersInstall {
-                Button(updates.installTitle) { updates.requestInstall() }
-                    .buttonStyle(.borderedProminent)
-                    .help("Installs the channel you picked, then quits and opens the new copy. Settings are kept")
-            } else {
-                Text(updates.build.shortVersionText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help(updates.build.versionText)        // the full version, build metadata included
+                Button {
+                    SettingsOpener.open(target: "update")
+                } label: {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+                .help("An update is available — open Updates to install it")
             }
+            Text(updates.build.shortVersionText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(updates.build.versionText)        // the full version, build metadata included
             Spacer()
             Button {
                 GuardControl.restartApp()

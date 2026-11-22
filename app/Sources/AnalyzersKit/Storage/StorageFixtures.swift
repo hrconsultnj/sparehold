@@ -52,7 +52,13 @@ public enum StorageFixtures {
                  StorageTask(kind: .tempClean, reclaimableBytes: 597_000_000, measuredAt: now.addingTimeInterval(-72_000),
                              detail: "15 items ready to clear."),
                  StorageTask(kind: .spotlight, reclaimableBytes: nil, measuredAt: now.addingTimeInterval(-72_000),
-                             detail: "13 developer folders still indexed.")])
+                             detail: "13 developer folders still indexed."),
+                 StorageTask(kind: .tmReclaim, reclaimableBytes: nil, measuredAt: now.addingTimeInterval(-72_000),
+                             detail: "11 local snapshots holding just-deleted blocks."),
+                 StorageTask(kind: .unusedApps, reclaimableBytes: 210_000_000, measuredAt: now.addingTimeInterval(-72_000),
+                             detail: "1 app can go to the Trash, every file that goes with it."),
+                 StorageTask(kind: .recordings, reclaimableBytes: 6_200_000_000, measuredAt: now.addingTimeInterval(-72_000),
+                             detail: "17 recordings of every age.")])
     }
 
     /// What a preview of Time Machine's local snapshots shows: two days of hourly snapshots and one of macOS's own.
@@ -60,7 +66,9 @@ public enum StorageFixtures {
         let stamp = DateFormatter(); stamp.locale = Locale(identifier: "en_US_POSIX"); stamp.dateFormat = "yyyy-MM-dd-HHmmss"
         let now = Date()
         var lines = ["FREE_BEFORE 51Gi"]
-        for hours in [1, 2, 3, 4, 26, 27, 28, 50] {
+        // one snapshot per stretch of the age bands: hours old, days old, weeks
+        // old, months old — so the band strip and the band groups all render
+        for hours in [1, 2, 3, 4, 26, 27, 28, 50, 200, 1_000, 4_000] {
             lines.append("SNAPSHOT \(stamp.string(from: now.addingTimeInterval(-Double(hours) * 3_600)))")
         }
         lines.append("OSSNAPSHOT com.apple.os.update-0123456789ABCDEF")
@@ -164,6 +172,9 @@ public enum StorageFixtures {
             add(entry("[DRY]", ["1.4 GB", "880.0 MB", "210.0 MB", "640.0 MB"][index], path), path: path, daysAgo: 110 - Double(index) * 9)
         }
         add(entry("[DRY]", "320.0 MB", "\(zoom)/loose-recording.mp4"), path: "\(zoom)/loose-recording.mp4", daysAgo: 120)
+        // young ones, so the under-7 and 7-to-30 bands render in the snapshot too
+        add(entry("[DRY]", "410.0 MB", "\(zoom)/2026-11-16 14.05.00 Retrospective"), path: "\(zoom)/2026-11-16 14.05.00 Retrospective", daysAgo: 4)
+        add(entry("[DRY]", "150.0 MB", "\(zoom)/2026-11-02 09.00.00 Weekly"), path: "\(zoom)/2026-11-02 09.00.00 Weekly", daysAgo: 19)
         lines.append("[KEEP]     540.0 MB  \(zoom)/2026-09-20 15.45.12 Board Meeting  —  Zoom has not converted this recording yet. Open it in Zoom first.")
         let shots = "\(home)/Desktop/Screenshots"
         lines.append("### Source\tscreenRecordings\tScreen Recordings\t\(shots)")
@@ -280,6 +291,62 @@ public enum StorageFixtures {
             "[TRASHED] 0 KB  \(home)/Desktop/Screenshots/Screenshot 1.png  ->  \(home)/.Trash/Screenshot 1.png",
         ]
         return DownloadReview.build(lines: lines, results: true).rows
+    }
+
+    // MARK: - the Cache Guardian (written as guardian.sh prints it, read by the same builder)
+
+    /// What a Guardian preview shows: the merged worktrees agents left behind (grouped by
+    /// repo, with the kept ones and why), the duplication census, the package stores with
+    /// their prunes and guidance, and Sparehold's own old reports.
+    public static func guardian() -> StorageRows {
+        GuardianReview.build(lines: guardianLines(many: false),
+                             banner: "guardian.sh | mode=guardian idle=14 parked=30 reports=90 | DRY RUN | 2026-11-21 08:00:00").rows
+    }
+
+    /// More of everything: worktrees in several repos, more guidance and older reports.
+    public static func guardianMany() -> StorageRows {
+        GuardianReview.build(lines: guardianLines(many: true),
+                             banner: "guardian.sh | mode=guardian idle=14 parked=30 reports=90 | DRY RUN | 2026-11-21 08:00:00").rows
+    }
+
+    private static func guardianLines(many: Bool) -> [String] {
+        var lines: [String] = []
+        lines.append("roots=\(home)/Projects  worktree-idle>14d  parked>30d  reports>90d")
+        lines.append("### G1. Git worktrees whose branch is merged into the repo's main branch, idle >14d")
+        lines.append("  [DRY]          1.2 GB  worktree  \(home)/Projects/etal/etal-crm/.composure/workspaces/rz-shells  \(home)/Projects/etal/etal-crm  branch feature/phase-d-w1-credentials merged into development · idle 21d+ · 2 dep dirs (310.0 MB)")
+        lines.append("  (left alone: \(home)/Projects/etal/etal-crm/.composure/workspaces/rz-open — it has uncommitted changes)")
+        lines.append("  (kept: \(home)/Projects/composure/composure-pro/wt-locked — it is locked)")
+        lines.append("  [DRY]        640.0 MB  worktree  \(home)/Projects/composure/composure-pro/.claude/worktrees/agent-batch  \(home)/Projects/composure/composure-pro  branch feature/batch-ui merged into development · idle 19d+ · 1 dep dirs (96.0 MB)")
+        lines.append("  [DRY]        410.0 MB  worktree  \(home)/Projects/unsigned-gg/site/.composure/workspaces/harden-infra  \(home)/Projects/unsigned-gg/site  branch feat/harden-infra merged into main · idle 30d+ · 3 dep dirs (1.1 GB)")
+        lines.append("  (kept 0 recent, live, locked, protected or unmerged; left 1 with uncommitted changes alone; 0 on main or named main; 0 stale records)")
+        lines.append("### G2. Projects whose worktrees duplicate dependency folders (advisory)")
+        lines.append("  info:etal-crm  3 worktrees carry 4 dependency folders, 1.1 GB between them · repo \(home)/Projects/etal/etal-crm — one shared package store or build directory would hold a single copy")
+        lines.append("### G3. Package stores and prunes")
+        lines.append("  store:pnpm       14.0 GB  \(home)/Library/pnpm/store/v11")
+        lines.append("  store:npm        4.2 GB  \(home)/.npm/_cacache")
+        lines.append("  store:sccache       74 MB  \(home)/Library/Caches/Mozilla.sccache")
+        lines.append("  store:cargo      310.0 MB  \(home)/.cargo/registry")
+        lines.append("  [DRY]     prune:pnpm  Unused packages in the pnpm store (size not known until it runs)")
+        lines.append("  [DRY]     prune:npm  The whole npm cache, which downloads again when needed (size not known until it runs)")
+        lines.append("  guide:sccache-basedirs  sccache is installed, but SCCACHE_BASEDIRS does not name any worktree root — worktree builds cannot share one cache; set it to the folder your projects live in")
+        if many {
+            lines.append("  [DRY]          2.0 GB  worktree  \(home)/Projects/etal/etal-crm/.composure/workspaces/rz-clients  \(home)/Projects/etal/etal-crm  branch feature/phase-c-providers merged into development · idle 44d+ · 2 dep dirs (540.0 MB)")
+            lines.append("  [DRY]        880.0 MB  worktree  \(home)/Projects/composure/composure-pro/.composure/workspaces/ws-review-gate  \(home)/Projects/composure/composure-pro  branch feature/review-gate merged into development · idle 25d+ · 1 dep dirs (210.0 MB)")
+            lines.append("  (kept: \(home)/Projects/unsigned-gg/site/.composure/workspaces/pr80-gateway-keys — a live session is sitting in it)")
+            lines.append("  info:composure-pro  3 worktrees carry 3 dependency folders, 620.0 MB between them · repo \(home)/Projects/composure/composure-pro — one shared package store or build directory would hold a single copy")
+            lines.append("  guide:pnpm-store-dir  \(home)/Projects/web-tools/monolith/.npmrc sets a project-local pnpm store-dir — its packages are copied per project instead of linked to one global store")
+            lines.append("  guide:cargo-target-dir  CARGO_TARGET_DIR points at one shared folder (\(home)/.cargo/target); concurrent builds contend on its lock — per-checkout targets build in parallel safely")
+            lines.append("  [DRY]         310.0 MB  retention  \(home)/sparehold/reports/storage/parked-worktrees/2026-10-08  parked worktree files · 45d old")
+            lines.append("  [DRY]          44.0 MB  retention  \(home)/sparehold/reports/memory/2026-05-24  report run · 182d old")
+        }
+        lines.append("### G4. Sparehold's own reports past their age (parked>30d, runs>90d)")
+        lines.append("  [DRY]           5.6 GB  retention  \(home)/sparehold/reports/storage/parked-worktrees/2026-11-13  parked worktree files · 39d old")
+        lines.append("  [DRY]         120.0 MB  retention  \(home)/sparehold/reports/storage/2026-05-07  report run · 198d old")
+        lines.append("==================================================================")
+        lines.append(" DRY RUN — identified ~8.3 GB reclaimable. Apply only through the Sparehold app's Cache Guardian (it writes the reviewed list), or --apply --only-paths <file>.")
+        lines.append(" Free space now: 101Gi avail (77% used)")
+        lines.append("==================================================================")
+        return lines.map { $0.trimmingCharacters(in: .whitespaces) }
     }
 }
 

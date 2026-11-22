@@ -206,14 +206,22 @@ struct AskSessionView: View {
         }
     }
 
-    /// The tile icon for the engine that answered: the vendor's own name in
-    /// the label — the CLIs ship no icon file, so nothing is fabricated; the
-    /// on-device engine gets the model chip.
+    /// The tile for the engine that answered: the vendor's own icon file,
+    /// loaded at runtime from the vendor's installed app — never bundled or
+    /// drawn here — falling back to the real company's initial when no file
+    /// exists on this Mac. The on-device engine keeps the model chip, a
+    /// custom command keeps the knobs tile.
+    @ViewBuilder
     private func engineTile(for label: String) -> some View {
-        let symbol = label.lowercased().contains("on-device") ? "memorychip"
-            : label.lowercased().contains("custom") ? "slider.horizontal.3"
-            : "terminal"
-        return IconTile(symbol: symbol, color: .mint, side: 24).accessibilityHidden(true)
+        let lowered = label.lowercased()
+        if lowered.contains("on-device") {
+            IconTile(symbol: "memorychip", color: .mint, side: 24)
+        } else if lowered.contains("custom") {
+            IconTile(symbol: "slider.horizontal.3", color: .mint, side: 24)
+        } else {
+            VendorEngineTile(brand: EngineIconLocations.brand(label: label),
+                             symbol: "terminal", color: .mint, side: 24)
+        }
     }
 
     private func userLine(_ text: String) -> some View {
@@ -299,7 +307,7 @@ struct AskSessionView: View {
     /// the model's own structure instead of a wall of characters.
     private func replyBlock(_ text: String, answeredBy: String?) -> some View {
         HStack(alignment: .top, spacing: Tokens.Space.m) {
-            engineTile(for: answeredBy ?? "")
+            engineTile(for: answeredBy ?? "").accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Tokens.Space.xs) {
                 Text(answeredBy ?? "Sparehold")
                     .font(.caption)

@@ -22,9 +22,10 @@ struct ReviewConfirmation {
 /// project or app they belong to (one parent row with its count and total, opening
 /// to its members; empty ones fold into one closed row), sortable columns,
 /// "12 selected · 3.2 GB" and one Apply. The apply goes through
-/// `JobStore.apply(from:approved:)` and nothing else, so the kernel's rules (a preview
-/// older than the review window, a discarded one, or one that never found its own
-/// results cannot be applied) hold on every screen that uses this.
+/// `JobStore.apply(from:approved:)` and nothing else, so the kernel's rules (a
+/// discarded preview, or one that never found its own results, cannot be applied;
+/// an older one still can — the engine skips paths that no longer exist) hold on
+/// every screen that uses this.
 ///
 /// A session belongs to one preview. Build it again whenever the preview changes, or
 /// Apply stays disabled with "These rows are from an older preview":
@@ -51,11 +52,15 @@ struct ReviewConfirmation {
 struct ReviewTable: View {
     @Bindable var session: ReviewSession
     var preview: Job?
-    var applyTitle = "Apply"
+    var applyTitle = Names.Review.applyNow
     var confirmation: ReviewConfirmation?
     var readOnly = false
     /// A line under the summary of a read-only review ("and 114 smaller ones are in the raw output").
     var note: String?
+    /// A line under the summary of any review (`Names.Review.trashFootnote`, what
+    /// this screen's cleanup means for the Trash and Undo). Shown whatever the
+    /// review's state, under the bar's own line.
+    var footnote: String?
     /// Shown beside a disabled Apply when the review is old or from another preview.
     var onPreviewAgain: (() -> Void)?
     var onApplied: (Job) -> Void = { _ in }
@@ -101,7 +106,6 @@ struct ReviewTable: View {
     @State private var asking = false
     @State private var askingPermanent = false
     @State private var appliedFor = PerPreview<Job>()
-    @State private var expired = false
     /// What was on offer when the confirmation opened: Apply sends exactly this.
     @State private var frozen: ReviewFrozen?
     @State private var notice: String?
@@ -110,8 +114,15 @@ struct ReviewTable: View {
     private var applied: Job? { appliedFor.value(for: preview?.id) }
 
     private var gate: ReviewApplyGate {
-        if expired { return .expired }
-        return session.selection.gate(previewID: preview?.id, finishedAt: preview?.finishedAt)
+        session.selection.gate(previewID: preview?.id)
+    }
+
+    /// Whether the preview behind the review is older than the adoption window.
+    /// Not a refusal — the engine skips paths that no longer exist — but the bar
+    /// says so, so an old list is applied knowingly.
+    private var isStale: Bool {
+        guard let end = preview?.finishedAt else { return false }
+        return Date().timeIntervalSince(end) > JobStore.reviewWindow
     }
 
     /// Why Apply is not available, or what its last try said: in words, in the bar.
@@ -120,11 +131,12 @@ struct ReviewTable: View {
         if let applied {
             switch applied.state {
             case .queued, .running: return "Applying…"
-            case .succeeded: return "Applied. Preview again to review what is left."
+            case .succeeded: return "Applied. Refresh This List to review what is left."
             case .failed(let failure): return failure.message
             case .cancelled: return "Stopped."
             }
         }
+        if isStale { return Names.Review.staleWarning }
         return gate.sentence
     }
 
@@ -175,7 +187,7 @@ struct ReviewTable: View {
                 self.frozen = nil
                 notice = "What would be applied changed while you were confirming. Check the list and press Apply again."
             }
-            .task(id: preview?.id) { await watchExpiry() }
+            .task(id: preview?.id) { await pruneTicks() }
             .task(id: applied?.id) { await watchApplied() }
     }
 
@@ -188,10 +200,13 @@ struct ReviewTable: View {
                 if let line = readOnly ? note : message {
                     Text(line).font(.caption).foregroundStyle(.secondary)
                 }
+                if let footnote {
+                    Text(footnote).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if !readOnly {
-                if let onPreviewAgain, gate == .expired || gate == .differentPreview {
+                if let onPreviewAgain, gate == .differentPreview {
                     Button(Names.Review.previewAgain, action: onPreviewAgain)
                 }
                 Button(Names.Review.selectAll) { session.selectAll() }
@@ -292,7 +307,7 @@ struct ReviewTable: View {
         guard gate == .ready else {
             // say why instead of closing the dialog without a word
             frozen = nil
-            notice = gate.sentence ?? "This review can no longer be applied. Preview again."
+            notice = gate.sentence ?? "This review can no longer be applied. Refresh This List."
             return
         }
         // from a confirmation: exactly what it showed; without one: the set as it is now
@@ -302,16 +317,12 @@ struct ReviewTable: View {
         onApplied(job)
     }
 
-    /// Apply turns itself off, saying "Preview Again", the moment the review window passes.
-    private func watchExpiry() async {
-        expired = false
-        // ticks of previews that can no longer be applied are of no use
+    /// Forgets the ticks of previews that are gone from the store or discarded.
+    /// Age is not part of it: an older preview keeps its ticks, for its apply is
+    /// still good.
+    private func pruneTicks() async {
         let live = store.jobs.filter { $0.intent == .preview && !store.dismissed.contains($0.id) }.map(\.id)
         ReviewTickStore.shared.keepOnly(Set(live))
-        guard let finished = preview?.finishedAt else { return }
-        let wait = finished.addingTimeInterval(JobStore.reviewWindow).timeIntervalSinceNow
-        if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
-        if !Task.isCancelled { expired = true }
     }
 
     /// Once the apply has finished successfully the ticks are of no further use.

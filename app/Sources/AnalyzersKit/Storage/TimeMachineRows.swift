@@ -7,9 +7,11 @@ public enum TimeMachineCategory: String, StorageCategory {
     public var symbol: String { "clock.arrow.circlepath" }
 }
 
-/// What a `tm-reclaim.sh` run printed, as the rows Storage screens share: one group per day, one row per local
-/// snapshot named by its time. There are no sizes: APFS cannot say how much one snapshot holds, and a made-up
-/// number would be worse than none. The real measure is the free space before and after, which the run prints.
+/// What a `tm-reclaim.sh` run printed, as the rows Storage screens share: one group per age band (under 7 days,
+/// 7 to 30, 30 to 90, older), one row per local snapshot named by its time, so the WHOLE folder is visible at
+/// once — every snapshot `tmutil` lists is in exactly one band, whatever the schedule thins. There are no sizes:
+/// APFS cannot say how much one snapshot holds, and a made-up number would be worse than none. The real measure
+/// is the free space before and after, which the run prints.
 public struct TimeMachineReview: Sendable {
     public let rows: StorageRows
     /// "51Gi" as `df` printed it, before and after (after only for an apply).
@@ -37,12 +39,12 @@ public struct TimeMachineReview: Sendable {
             else if line.hasPrefix("FREE_AFTER ") { after = String(line.dropFirst(11)) }
             else if line.contains("needs permission") { denied = true }
             else if line.hasPrefix("SNAPSHOT "), let date = stamp.date(from: String(line.dropFirst(9))) {
-                let group = calendar.isDate(date, inSameDayAs: now) ? "Today"
-                    : (calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: now) ?? now) ? "Yesterday" : day.string(from: date))
-                rows.append(StorageRow(id: String(line.dropFirst(9)), category: TimeMachineCategory.snapshots.rawValue, group: group,
+                let band = AgeBand(date: date, now: now, calendar: calendar)
+                rows.append(StorageRow(id: String(line.dropFirst(9)), category: TimeMachineCategory.snapshots.rawValue, group: band.title,
                                        title: time.string(from: date),
-                                       detail: results ? nil : "Local snapshot",
-                                       valueText: results ? (notDone ? "Couldn't Delete" : "Deleted") : nil))
+                                       detail: results ? nil : "Local snapshot · \(day.string(from: date))",
+                                       valueText: results ? (notDone ? "Couldn't Delete" : "Deleted") : nil,
+                                       band: band))
             } else if line.hasPrefix("OSSNAPSHOT ") {
                 // macOS's own update snapshots are not ours: shown, never offered
                 rows.append(StorageRow(id: String(line.dropFirst(11)), category: TimeMachineCategory.snapshots.rawValue,

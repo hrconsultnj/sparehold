@@ -10,7 +10,6 @@ struct RecordingSourceRow: View {
     /// What the newest preview found in this source; nil when it has not been previewed.
     let found: RecordingFound?
     let previewed: Bool
-    let days: Int
     @Binding var isOn: Bool
     /// The person's own folder: has a Remove button instead of a note about the app.
     var onRemove: (() -> Void)?
@@ -87,8 +86,8 @@ struct RecordingSourceRow: View {
 
     private var foundText: String? {
         guard previewed else { return nil }
-        guard let found, found.count > 0 else { return "Nothing older than \(days) days" }
-        return "\(found.count) \(found.count == 1 ? "recording" : "recordings") · \(ByteSize.format(found.bytes)) older than \(days) days"
+        guard let found, found.count > 0 else { return "Nothing found in it" }
+        return "\(found.count) \(found.count == 1 ? "recording" : "recordings") · \(ByteSize.format(found.bytes)) in it, of every age"
     }
 
     /// The question, said in the person's words, with the one button that lets macOS ask it.

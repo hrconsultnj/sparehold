@@ -63,9 +63,6 @@ struct JobStamp: Equatable {
 extension Job {
     var stamp: JobStamp { JobStamp(self) }
 
-    /// When a finished preview stops being something to apply; nil while it runs.
-    var reviewExpiry: Date? { finishedAt.map { $0.addingTimeInterval(JobStore.reviewWindow) } }
-
     /// Still queued or running.
     var isActive: Bool { !state.isFinished }
 

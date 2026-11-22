@@ -78,6 +78,7 @@ public enum AnalyzersPaths {
     public static let memoryAutoCleanLog = memoryReports.appending(path: "auto-clean.log")
     public static let reclaimLog = memoryReports.appending(path: "reclaim.log")
     public static let storageAutoCleanLog = storageReports.appending(path: "auto-clean.log")
+    public static let guardianLog = storageReports.appending(path: "guardian.log")
     public static let loginItemsAuditLog = storageReports.appending(path: "login-items-audit.log")
     public static let spotlightAuditLog = storageReports.appending(path: "spotlight-audit.log")
     public static let tempCleanLog = storageReports.appending(path: "temp-clean.log")

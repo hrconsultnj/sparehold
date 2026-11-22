@@ -72,12 +72,8 @@ struct ActivityView: View {
         }
         // a link opened while Activity is already showing
         .onChange(of: navigator.pendingIntent) { applyPendingLink() }
-        // a review stops waiting at a known moment: look again then
-        .task(id: model.nextReviewExpiry) {
-            guard let expiry = model.nextReviewExpiry else { return }
-            try? await Task.sleep(for: .seconds(max(1, expiry.timeIntervalSinceNow + 1)))
-            await model.refresh(store: store)
-        }
+        // a review stops waiting when its job leaves the store or is discarded: the store's
+        // own change (below) is the moment to look again; there is no clock to wake up to
         .onChange(of: storeStamp) { Task { await model.refreshIfNeeded(store: store, maxAge: 0) } }
     }
 
@@ -133,7 +129,7 @@ struct ActivityView: View {
                            description: Text("A cleanup or check that is running shows here, with a Stop button."))
             case .needsReview:
                 EmptyState("Nothing Is Waiting for Review", systemImage: "eye",
-                           description: Text("A preview you ran in the last \(Int(JobStore.reviewWindow / 60)) minutes that found something shows here until you apply or discard it. Older ones stay in the list as what they found."))
+                           description: Text("A preview you ran that found something shows here until you apply or discard it. Runs this app didn't start stay in the list as what they found."))
             case .failed:
                 EmptyState("Nothing Has Failed", systemImage: "checkmark.circle",
                            description: Text("Runs that could not finish are listed here, with the reason."))

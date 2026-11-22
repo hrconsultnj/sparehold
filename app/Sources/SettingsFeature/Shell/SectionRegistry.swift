@@ -10,8 +10,8 @@ enum SectionRegistry {
         let groups = [
             AskGroup.group,
             OverviewGroup.group,
-            MemoryGroup.group,
             StorageGroup.group,
+            MemoryGroup.group,
             SystemGroup.group,
             HistoryGroup.group,
             SettingsGroup.group,
@@ -20,6 +20,18 @@ enum SectionRegistry {
         assertNoDuplicates(in: groups)
         return groups
     }()
+
+    /// The sidebar row a section shows as selected: itself when it has a row of
+    /// its own, else its group's first visible row — a category's nested screens
+    /// keep the category highlighted, the way System Settings keeps "General"
+    /// selected while a pane under it is open (Storage stays lit while Caches &
+    /// Builds, Time Machine or Old Recordings is on screen). nil for the app
+    /// group, whose foot item highlights itself.
+    static func sidebarSelection(for section: SectionID) -> SectionID? {
+        guard let group = groups.first(where: { $0.sections.contains(section) }) else { return nil }
+        if group.rows.contains(where: { $0.section == section && $0.inSidebar }) { return section }
+        return group.rows.first(where: \.inSidebar)?.section
+    }
 
     /// The results view a group supplied for a kind of task, if any (the run screen's slot).
     static func runResults(for row: ActivityRow) -> ((ActivityRow) -> AnyView)? {

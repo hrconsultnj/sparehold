@@ -6,7 +6,8 @@
 # same account. This proves: as root it refuses (exit 2) and installs nothing; as yourself it asks sudo for the password itself,
 # the rule is written for you and nobody else, `visudo -cf` validates BEFORE install and a failing check stops
 # everything, the rule is verified by LISTING the command (nothing is thinned), `--for-user` is gone, the template
-# holds exactly one rule with no wildcard, and `sudoers-status` says whether the file is there. `id`, `visudo`,
+# holds exactly the two scoped commands (the thin rule has no wildcard; the delete rule's only one is its date slot),
+# and `sudoers-status` says whether the file is there. `id`, `visudo`,
 # `install`, `sudo` and `tmutil` are stand-ins on PATH that only log; the rule's destination is a temp file in a
 # copy of the script. Nothing is ever installed under /etc. Runs under `bash` and /bin/bash (3.2).
 #
@@ -73,7 +74,10 @@ file_for() { echo "$ETC/tmutil-thin-$1"; }
 active_rule() { grep -E '^#[0-9]+ ' "$1"; }
 line_no() { grep -n "$1" "$TMP/calls" | head -1 | cut -d: -f1; }
 clean() { rm -f "$ETC"/* "$TMP/visudo-fail" "$TMP/visudo-live-fail"; }
-RULE='ALL=(root) NOPASSWD: /usr/bin/tmutil thinlocalsnapshots / 999999999999 4'
+RULE_ONE='ALL=(root) NOPASSWD: /usr/bin/tmutil thinlocalsnapshots / 999999999999 4'
+RULE_DELETE='ALL=(root) NOPASSWD: /usr/bin/tmutil deletelocalsnapshots / *'
+# the installed form: both commands, each on its own line prefixed with the account's user ID
+installed_rule() { printf '#%s %s\n#%s %s' "$1" "$RULE_ONE" "$1" "$RULE_DELETE"; }
 
 for sh in bash /bin/bash; do
   clean; unset STUB_LIST_RC
@@ -91,12 +95,12 @@ for sh in bash /bin/bash; do
         "$([[ $rc -eq 0 && "$(grep -c '^sudo -v$' "$TMP/calls")" -eq 1 && "$(grep -c '^sudo visudo -cf' "$TMP/calls")" -eq 1 && "$(grep -c '^sudo install ' "$TMP/calls")" -eq 1 ]] && echo ok || echo "exit $rc: $(grep '^sudo' "$TMP/calls" | tr '\n' ';')")"
   check "[$sh] the file is this account's own, tmutil-thin-<uid> (no dot, so sudo reads it), and nothing else is written" \
         "$([[ -f "$D" && "$(ls "$ETC")" == "tmutil-thin-501" ]] && echo ok || ls "$ETC")"
-  check "[$sh] the rule is for your numeric user ID and is the one scoped command; no name, never root" \
-        "$([[ "$(active_rule "$D")" == "#501 $RULE" && "$(grep -c 'bob\|^root ' "$D")" -eq 0 ]] && echo ok || active_rule "$D")"
+  check "[$sh] the rule is for your numeric user ID and is the two scoped commands; no name, never root" \
+        "$([[ "$(active_rule "$D")" == "$(installed_rule 501)" && "$(grep -c 'bob\|^root ' "$D")" -eq 0 ]] && echo ok || active_rule "$D")"
   for odd in ALL FOOBAR CWD; do
     clean; out="$(run "$sh" 502 "$odd" sudoers-install)"
     check "[$sh] an account named $odd gets a rule for #502 and its name is never written" \
-          "$([[ "$(active_rule "$(file_for 502)")" == "#502 $RULE" && "$(grep -vE '^(# |#$|#[0-9]+ )' "$(file_for 502)" | grep -c .)" -eq 0 && "$(grep -c "$odd" <<< "$(active_rule "$(file_for 502)" | cut -d' ' -f1)")" -eq 0 ]] && echo ok || active_rule "$(file_for 502)")"
+          "$([[ "$(active_rule "$(file_for 502)")" == "$(installed_rule 502)" && "$(grep -vE '^(# |#$|#[0-9]+ )' "$(file_for 502)" | grep -c .)" -eq 0 && "$(grep -c "$odd" <<< "$(active_rule "$(file_for 502)" | cut -d' ' -f1)")" -eq 0 ]] && echo ok || active_rule "$(file_for 502)")"
   done
   clean; run "$sh" 501 bob sudoers-install > /dev/null
   check "[$sh] visudo -cf validates the file BEFORE it is installed" \
@@ -109,7 +113,7 @@ for sh in bash /bin/bash; do
   # two accounts: each has its own file, a second install never replaces the first's
   clean; run "$sh" 501 bob sudoers-install > /dev/null; run "$sh" 502 carol sudoers-install > /dev/null
   check "[$sh] a second account's install leaves the first account's file as it was" \
-        "$([[ "$(active_rule "$(file_for 501)")" == "#501 $RULE" && "$(active_rule "$(file_for 502)")" == "#502 $RULE" ]] && echo ok || ls "$ETC")"
+        "$([[ "$(active_rule "$(file_for 501)")" == "$(installed_rule 501)" && "$(active_rule "$(file_for 502)")" == "$(installed_rule 502)" ]] && echo ok || ls "$ETC")"
   out="$(run "$sh" 502 carol sudoers-uninstall)"
   check "[$sh] one account's uninstall removes only its own file" "$([[ ! -e "$(file_for 502)" && -e "$(file_for 501)" ]] && echo ok || ls "$ETC")"
 
@@ -129,15 +133,15 @@ for sh in bash /bin/bash; do
 
   # ---- the old shared file (/etc/sudoers.d/tmutil-thin, the name form) ----
   # theirs, by name: replaced and removed at a terminal
-  clean; printf '# old\nbob %s\n' "$RULE" > "$OLD"
+  clean; printf '# old\nbob %s\n' "$RULE_ONE" > "$OLD"
   out="$(run "$sh" 501 bob sudoers-install)"; rc=$?
   check "[$sh] old file for this account by name: the new file is written and the old one removed" "$([[ $rc -eq 0 && -f "$(file_for 501)" && ! -e "$OLD" && "$out" == *"removed the old shared file"* ]] && echo ok || echo "exit $rc: $(ls "$ETC"): $out")"
   # theirs, by user ID (written by an earlier build)
-  clean; printf '#501 %s\n' "$RULE" > "$OLD"
+  clean; printf '#501 %s\n' "$RULE_ONE" > "$OLD"
   out="$(run "$sh" 501 bob sudoers-install)"; rc=$?
   check "[$sh] old file for this account by user ID: removed" "$([[ $rc -eq 0 && ! -e "$OLD" && -f "$(file_for 501)" ]] && echo ok || ls "$ETC")"
   # another account's: left alone, and said so
-  clean; printf 'alice %s\n' "$RULE" > "$OLD"
+  clean; printf 'alice %s\n' "$RULE_ONE" > "$OLD"
   out="$(run "$sh" 501 bob sudoers-install)"; rc=$?
   check "[$sh] old file for ANOTHER account: left in place, said so, the new file still written" "$([[ $rc -eq 0 && -f "$OLD" && -f "$(file_for 501)" && "$out" == *"left $ETC/tmutil-thin in place"* ]] && echo ok || echo "exit $rc: $(ls "$ETC"): $out")"
   # the same account, but not the suite's rule: widened, a different command, extra arguments, white space aside it is fine
@@ -147,7 +151,7 @@ for sh in bash /bin/bash; do
   clean; printf 'bob ALL=(root) NOPASSWD: /usr/bin/tmutil deletelocalsnapshots 2026-01-01\n' > "$OLD"
   run "$sh" 501 bob sudoers-install > /dev/null
   check "[$sh] old file for this account but a different command: left in place" "$([[ -f "$OLD" ]] && echo ok || echo removed)"
-  clean; printf 'bob %s extra\n' "$RULE" > "$OLD"
+  clean; printf 'bob %s extra\n' "$RULE_ONE" > "$OLD"
   run "$sh" 501 bob sudoers-install > /dev/null
   check "[$sh] old file with the suite's rule plus extra arguments: left in place" "$([[ -f "$OLD" ]] && echo ok || echo removed)"
   clean; printf 'bob ALL=(root) NOPASSWD: /usr/bin/tmutil thinlocalsnapshots / 999999999999\n' > "$OLD"
@@ -160,20 +164,20 @@ for sh in bash /bin/bash; do
   out="$(run "$sh" 501 bob sudoers-uninstall)"
   check "[$sh] sudoers-uninstall leaves a widened old rule too, with the command to remove it by hand" "$([[ -f "$OLD" && ! -e "$(file_for 501)" && "$out" == *"not exactly this suite's rule"* && "$out" == *"sudo rm $ETC/tmutil-thin"* ]] && echo ok || echo "$out")"
   # more than one rule in it: not touched
-  clean; printf 'bob %s\nalice %s\n' "$RULE" "$RULE" > "$OLD"
+  clean; printf 'bob %s\nalice %s\n' "$RULE_ONE" "$RULE_ONE" > "$OLD"
   out="$(run "$sh" 501 bob sudoers-install)"
   check "[$sh] old file with more than one rule: left in place" "$([[ -f "$OLD" ]] && echo ok || echo removed)"
   # the old file is not removed when the new one failed
-  clean; printf 'bob %s\n' "$RULE" > "$OLD"; : > "$TMP/visudo-fail"
+  clean; printf 'bob %s\n' "$RULE_ONE" > "$OLD"; : > "$TMP/visudo-fail"
   out="$(run "$sh" 501 bob sudoers-install)"
   check "[$sh] a failed install leaves the old file as it was" "$([[ -f "$OLD" && ! -e "$(file_for 501)" ]] && echo ok || ls "$ETC")"
   rm -f "$TMP/visudo-fail"
 
   # ---- sudoers-uninstall and sudoers-status, both files ----
-  clean; printf 'bob %s\n' "$RULE" > "$OLD"; run "$sh" 501 bob sudoers-install > /dev/null; printf 'bob %s\n' "$RULE" > "$OLD"
+  clean; printf 'bob %s\n' "$RULE_ONE" > "$OLD"; run "$sh" 501 bob sudoers-install > /dev/null; printf 'bob %s\n' "$RULE_ONE" > "$OLD"
   out="$(run "$sh" 501 bob sudoers-uninstall)"; rc=$?
   check "[$sh] sudoers-uninstall removes this account's file and the old shared one when it is this account's" "$([[ $rc -eq 0 && -z "$(ls "$ETC")" ]] && echo ok || ls "$ETC")"
-  clean; printf 'alice %s\n' "$RULE" > "$OLD"; : > "$(file_for 501)"
+  clean; printf 'alice %s\n' "$RULE_ONE" > "$OLD"; : > "$(file_for 501)"
   out="$(run "$sh" 501 bob sudoers-uninstall)"
   check "[$sh] sudoers-uninstall leaves another account's old file and says how to remove it" "$([[ -f "$OLD" && ! -e "$(file_for 501)" && "$out" == *"sudo rm $ETC/tmutil-thin"* ]] && echo ok || echo "$out")"
   clean
@@ -194,12 +198,13 @@ for sh in bash /bin/bash; do
   check "[$sh] sudoers-status: only the old shared file, exit 0 and says it is an earlier one" "$([[ $rc -eq 0 && "$out" == "earlier shared file: "* ]] && echo ok || echo "exit $rc: $out")"
 done
 
-# the template: exactly one rule, the one command, no wildcard, and no --for-user left in the script
+# the template: exactly the two scoped commands, and no --for-user left in the script
 T="$HERE/../storage/sudoers.d/tmutil-thin"
 active="$(grep -v '^[[:space:]]*#' "$T" | grep -v '^[[:space:]]*$')"
-check "template holds exactly one rule" "$([[ "$(printf '%s\n' "$active" | wc -l | tr -d ' ')" -eq 1 ]] && echo ok || echo "$active")"
-check "template rule is the exact command, for the __UID__ placeholder" "$([[ "$active" == "__UID__ ALL=(root) NOPASSWD: /usr/bin/tmutil thinlocalsnapshots / 999999999999 4" ]] && echo ok || echo "$active")"
-check "template rule has no wildcard" "$([[ "$active" != *'*'* ]] && echo ok || echo wildcard)"
+check "template holds exactly two rules" "$([[ "$(printf '%s\n' "$active" | wc -l | tr -d ' ')" -eq 2 ]] && echo ok || echo "$active")"
+check "template rules are the two scoped commands, for the __UID__ placeholder" "$([[ "$active" == "__UID__ $RULE_ONE
+__UID__ $RULE_DELETE" ]] && echo ok || echo "$active")"
+check "the thin rule has no wildcard; the delete rule's only one is its date slot" "$([[ "$(grep thinlocalsnapshots <<< "$active" | grep -c '\*')" -eq 0 && "$active" == *"deletelocalsnapshots / *" ]] && echo ok || echo "$active")"
 check "script has no --for-user" "$(grep -q -- '--for-user' "$SCRIPT" && echo "still there" || echo ok)"
 
 # the real visudo, on scratch files only (-cf checks a file and installs nothing; no password, nothing under /etc)

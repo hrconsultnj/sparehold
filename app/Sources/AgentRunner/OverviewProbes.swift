@@ -43,7 +43,7 @@ func probeTrends(_ args: [String]) {
 func probeUndo(_ args: [String]) {
     let now = Date()
     let started = Date()
-    let entries = UndoHistory.entries(now: now)
+    let entries = UndoHistory.entries(now: now, trashReadable: true)
     let took = Date().timeIntervalSince(started)
     print("TIME  \(entries.count) entries read in \(String(format: "%.1f", took)) s (receipts of two logs, their dates, and the guard log)")
     var problems: [String] = []
@@ -68,6 +68,26 @@ func probeUndo(_ args: [String]) {
     }
     for problem in problems { print("NOTE: \(problem)") }
     print("\(entries.count) entries (\(entries.filter { $0.scope == .trashed }.count) moved to the Trash, \(entries.filter { $0.scope == .stopped }.count) stopped)")
+    // the Trash reconciliation the screen is built from: each cleanup in exactly one state
+    let trash = TrashSnapshot.take()
+    let reconciliation = UndoModel(entries: entries, trash: trash).reconciliation
+    print("TRASH  \(trash.access == .readable ? "readable, \(trash.itemCount) items" : "NOT READABLE: \(trash.failureText ?? "")")")
+    for (name, group) in [("RESTORABLE", reconciliation.restorable), ("EMPTIED", reconciliation.emptied)] {
+        let bytes = group.restorableBytes
+        print("  \(name)  \(group.cleanups.count) cleanup\(group.cleanups.count == 1 ? "" : "s") · \(group.totalItems) items"
+            + (bytes > 0 ? " · \(ByteSize.format(bytes))" : ""))
+        for run in group.cleanups.prefix(6) {
+            let state: String
+            switch run.trashState {
+            case .restorable: state = "restorable"
+            case .partial(let n): state = "\(n) of \(run.count)"
+            case .emptied: state = "emptied"
+            }
+            print("    \(run.by) · \(run.when?.formatted(.dateTime.month(.abbreviated).day()) ?? "undated") — \(run.summary)  [\(state)]")
+            print("      id: undo:cleanup:\(run.id)")
+        }
+        if group.cleanups.count > 6 { print("    … and \(group.cleanups.count - 6) more cleanups") }
+    }
     exit(0)
 }
 

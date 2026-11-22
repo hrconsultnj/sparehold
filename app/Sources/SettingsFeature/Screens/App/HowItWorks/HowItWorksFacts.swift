@@ -70,6 +70,15 @@ struct HowItWorksFacts: Sendable {
     var timeMachinePermission = false
     var version = ""
 
+    // the Ask agent's switches, as this Mac has them set (the settings file's AGENT_CAPABILITIES, through ConfigStore)
+    var agentCapabilitiesOn = AgentCapability.defaultEnabledIDs.count
+    var agentPreludeSet = false
+
+    /// The Trash ledger as Undo reads it (whole logs, so it arrives with `logsRead`): the things this Mac's cleanups
+    /// moved to the Trash, and how many can still be put back. nil until read.
+    var trashedCount: Int?
+    var restorableCount: Int?
+
     // MARK: - sentences the topics share
     // A value that was not read is nil, and the sentence that would quote it is left out (never a stand-in word).
 
@@ -104,6 +113,22 @@ struct HowItWorksFacts: Sendable {
     func notScheduled(_ label: String) -> String {
         "\(schedule(label)?.name ?? label) is not scheduled on this Mac."
     }
+
+    /// The agent's capability switches, as a count against the fixed catalog.
+    var agentCapabilitiesTotal: Int { AgentCapability.all.count }
+
+    /// "4 of the 5 capabilities are switched on on this Mac."
+    var agentCapabilitiesLine: String {
+        let on = agentCapabilitiesOn
+        return "\(on) of the \(agentCapabilitiesTotal) capabilities \(on == 1 ? "is" : "are") switched on on this Mac."
+    }
+
+    /// "3 of the 4 things the cleanups moved to the Trash can still be put back", said only when the ledger was read.
+    var undoLine: String? {
+        guard let trashedCount, let restorableCount else { return nil }
+        guard trashedCount > 0 else { return "Nothing the cleanups moved to the Trash is sitting there right now." }
+        return "\(restorableCount) of the \(trashedCount) \(trashedCount == 1 ? "thing" : "things") the cleanups moved to the Trash can still be put back."
+    }
 }
 
 extension HowItWorksFacts {
@@ -136,6 +161,8 @@ extension HowItWorksFacts {
         f.nodeModulesNeedClean = config.storage.nmRequireClean
         f.recordingsDays = config.storage.recordingsDays
         f.turboCacheMaxGB = config.storage.turboCacheMaxGB
+        f.agentCapabilitiesOn = config.agent.capabilities.count
+        f.agentPreludeSet = !config.agent.prelude.isEmpty
         f.schedules = ScheduleKit.jobs.map { job in
             let installed = ScheduleKit.isInstalled(job.label)
             return HowItWorksFacts.ScheduleLine(
@@ -178,6 +205,12 @@ final class HowItWorksModel {
                            cpuHogs: snapshot.cpuHogs, memoryFreedMB: snapshot.memoryFreedMB,
                            storageFreedBytes: snapshot.storageFreedBytes, cleanRuns: snapshot.cleanRuns,
                            reclaimableBytes: snapshot.latestReclaimableBytes)
+        }
+        // the same read the Undo screen makes, counted once: what the Trash ledger holds right now
+        await awaitLoad({ UndoModel.take() }, ttl: 60, key: "howItWorks.undo") { model in
+            let trashed = model.entries.filter { $0.scope == .trashed }
+            f.trashedCount = trashed.count
+            f.restorableCount = trashed.filter(\.isRestorable).count
         }
         guard !Task.isCancelled else { return }
         f.logsRead = true

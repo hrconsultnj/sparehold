@@ -43,7 +43,7 @@ public enum JobKindError: Error, Sendable, Equatable, CustomStringConvertible {
 /// an action flag. `JobStore` is the only thing that builds an apply.
 public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case memoryClean, reclaim, storageClean, janitor, tempClean, tmReclaim, spotlight, loginItems
-    case unusedApps, recordings
+    case unusedApps, recordings, guardian
     case networkSnapshot, memoryReport, storageReport
     case installAgents, uninstallAgents, sudoersInstall, eject
 
@@ -56,7 +56,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     public var isCleaner: Bool {
         switch self {
         case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean, .tmReclaim,
-             .spotlight, .loginItems, .unusedApps, .recordings: true
+             .spotlight, .loginItems, .unusedApps, .recordings, .guardian: true
         case .networkSnapshot, .memoryReport, .storageReport,
              .installAgents, .uninstallAgents, .sudoersInstall, .eject: false
         }
@@ -91,6 +91,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .loginItems: .loginItems
         case .unusedApps: .cleanupApps
         case .recordings: .cleanupRecordings
+        case .guardian: .guardian
         case .tmReclaim: .tmReclaim
         case .networkSnapshot, .memoryReport, .storageReport,
              .installAgents, .uninstallAgents, .sudoersInstall: nil
@@ -114,6 +115,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .loginItems: return [root.appending(path: "storage/login-items-audit.sh")]
         case .tmReclaim: return [root.appending(path: "storage/tm-reclaim.sh")]
         case .unusedApps, .recordings: return [root.appending(path: "storage/cleanup.sh")]
+        case .guardian: return [root.appending(path: "storage/guardian.sh")]
         case .networkSnapshot: return [AnalyzersPaths.networkScript]
         case .memoryReport: return [AnalyzersPaths.memoryAnalyzeScript]
         case .storageReport: return [AnalyzersPaths.storageAnalyzeScript]
@@ -136,6 +138,8 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case (.eject, _):
             let name = options.mountPoint.map { ($0 as NSString).lastPathComponent }
             return "eject \(name.flatMap { $0.isEmpty ? nil : $0 } ?? "the disk image")"
+        case (.guardian, .preview): return "run the Guardian preview"
+        case (.guardian, .apply): return "apply the Guardian"
         case (.memoryReport, _), (.storageReport, _): return "write the report"
         case (.networkSnapshot, _): return "take the snapshot"
         case (.installAgents, _): return "install the background jobs"
@@ -175,7 +179,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     public var approvalFlag: String? {
         switch self {
         case .memoryClean, .reclaim: "--only-pids"
-        case .storageClean, .janitor, .tempClean, .loginItems, .unusedApps, .recordings: "--only-paths"
+        case .storageClean, .janitor, .tempClean, .loginItems, .unusedApps, .recordings, .guardian: "--only-paths"
         case .spotlight, .tmReclaim: nil
         case .networkSnapshot, .memoryReport, .storageReport, .installAgents, .uninstallAgents,
              .sudoersInstall, .eject: nil     // not cleaners: no apply
@@ -197,6 +201,11 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .tempClean: options.permanent ? ["--permanent"] : []
         case .memoryClean: options.includeBusyOrphans ? ["--orphans-all"] : []
         case .reclaim: options.alsoQuit.isEmpty ? [] : ["--apps-list", options.alsoQuit.joined(separator: "\n")]
+        // the apply repeats the preview's numbers, so the reviewed findings and the acted findings are the same query
+        case .guardian:
+            ["--worktree-idle-days", String(options.worktreeIdleDays),
+             "--parked-days", String(options.parkedDays),
+             "--reports-days", String(options.reportsDays)]
         default: []
         }
     }
@@ -205,7 +214,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     public func previewArgs(_ options: JobOptions) throws -> [String] {
         guard isCleaner else { throw JobKindError.unsupported(self, .preview) }
         switch self {
-        case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean:
+        case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean, .guardian:
             return ["--dry-run"] + modeArgs(options)
         case .spotlight, .loginItems, .tmReclaim:
             return ["--dry-run"]
@@ -224,15 +233,19 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     func applyArgs(_ options: JobOptions, approvedFile: URL?) throws -> [String] {
         let approval = approvalFlag.flatMap { flag in approvedFile.map { [flag, $0.path] } } ?? []
         switch self {
-        case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean:
+        case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean, .guardian:
             return ["--apply"] + modeArgs(options) + approval
         case .loginItems:
             return ["--apply"] + approval
         case .spotlight:
             return ["--apply"]
         case .tmReclaim:
-            // looks first (`--dry-run`, the default) and acts only with `--apply`; no list: there is one thing to do
-            return ["--apply"] + (options.startBackup ? [] : ["--no-backup"])
+            // looks first (`--dry-run`, the default) and acts only with `--apply`; no list: there is one thing to do.
+            // `--older-than N` deletes only snapshots older than N days (the per-band action); without it the
+            // thin command runs as the permission allows — every local snapshot at once.
+            var tmArgs = ["--apply"] + (options.startBackup ? [] : ["--no-backup"])
+            if let older = options.tmOlderThan { tmArgs += ["--older-than", String(older)] }
+            return tmArgs
         case .unusedApps:
             return ["--stale-apps", "--execute", "--yes"] + approval
         case .recordings:

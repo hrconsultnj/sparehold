@@ -91,7 +91,7 @@ struct StorageSettingsView: View {
                 }
             }
             LabeledContent {
-                Stepper("\(config.wrappedValue.storage.turboCacheMaxGB) GB per repo",
+                Stepper("\(config.wrappedValue.storage.turboCacheMaxGB) GB in total",
                         value: config.storage.turboCacheMaxGB, in: 1...50)
             } label: {
                 VStack(alignment: .leading, spacing: Tokens.Space.hair) {

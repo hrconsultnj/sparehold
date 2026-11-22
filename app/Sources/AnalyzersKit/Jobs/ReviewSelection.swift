@@ -2,6 +2,10 @@ import Foundation
 import os
 
 /// What Apply may do right now, decided from the review and its preview alone.
+///
+/// Age is not a gate: an older preview still applies, and the engine skips any
+/// path that no longer exists at apply time, so what it touches can only shrink.
+/// The bar shows `Names.Review.staleWarning` for an old preview instead.
 public enum ReviewApplyGate: Equatable, Sendable {
     case ready
     /// No finished preview stands behind the rows (an example, or a read-only review).
@@ -9,16 +13,13 @@ public enum ReviewApplyGate: Equatable, Sendable {
     /// The rows came from another preview than the one now current: acting on them
     /// would clean something nobody reviewed.
     case differentPreview
-    /// More than `JobStore.reviewWindow` has passed since the preview finished.
-    case expired
 
     /// The sentence the bar shows when Apply is not available; nil when it is.
     public var sentence: String? {
         switch self {
         case .ready: nil
         case .noPreview: nil
-        case .differentPreview: "These rows are from an older preview. Preview again to review what would be cleaned now."
-        case .expired: "This review is more than \(Int(JobStore.reviewWindow / 60)) minutes old. Preview Again to see what would be cleaned now."
+        case .differentPreview: "These rows are from an older preview. Refresh This List to review what would be cleaned now."
         }
     }
 }
@@ -132,11 +133,11 @@ public struct ReviewSelection: Sendable {
         return wanted.restricted(over: items.map(\.id), keeping: keep)
     }
 
-    /// Whether Apply is allowed against `preview` at `now`.
-    public func gate(previewID current: UUID?, finishedAt: Date?, now: Date = Date()) -> ReviewApplyGate {
+    /// Whether Apply is allowed against the preview now on screen. Age is not
+    /// part of it: the engine re-validates every path at apply time.
+    public func gate(previewID current: UUID?) -> ReviewApplyGate {
         guard let current else { return .noPreview }
         guard current == previewID else { return .differentPreview }
-        if let finishedAt, now.timeIntervalSince(finishedAt) > JobStore.reviewWindow { return .expired }
         return .ready
     }
 }

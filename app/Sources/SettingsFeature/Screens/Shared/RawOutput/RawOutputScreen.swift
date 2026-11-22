@@ -14,6 +14,11 @@ enum RawOutputSubject: Hashable, Codable {
     /// A file (a report as written). `fromTop: true` reads and opens at the beginning, the way a
     /// document is read; false reads the end and opens at the newest line, the way a log is.
     case file(URL, fromTop: Bool)
+    /// One Memory Guard event's own log lines, by the history row's id — the same id the
+    /// entry screen carries. The row is looked up the way the entry screen looks it up
+    /// (`GuardOpenedRows.loaded`), so an event reached from its screen shows the very
+    /// lines that screen is about.
+    case guardEntry(String)
 }
 
 /// The raw text of a run, a job or a log, inside the app: searchable, selectable,
@@ -29,7 +34,8 @@ enum RawOutputSubject: Hashable, Codable {
 /// Which source: a run or job you already hold, `.run` / `.job`; an engine log, `.log` (its end,
 /// newest line first in view); any other file, `.file(url, fromTop:)` — `fromTop: true` for a
 /// document (a report, read from its first line, "First 5,000 lines" when cut), `false` for a
-/// file that grows at the end like a log.
+/// file that grows at the end like a log; a Memory Guard event's own lines, `.guardEntry(id)`,
+/// read the same way its entry screen finds the row.
 struct RawOutputScreen: View {
     let subject: RawOutputSubject
 
@@ -41,6 +47,9 @@ struct RawOutputScreen: View {
     @Environment(JobStore.self) private var store
     @State private var query = ""
     @State private var log: LoadedLog?
+    /// The guard event's row, once looked up (a `.guardEntry` subject).
+    @State private var entry: GuardHistory.Row?
+    @State private var entryLooked = false
     private var model: ActivityModel { .shared }
 
     private struct LoadedLog { var lines: [String]; var cut: Bool; var gone = false }
@@ -60,18 +69,25 @@ struct RawOutputScreen: View {
             return model.rows.first { $0.jobID == id }.map { (model.lines(for: $0), false) }
         case .log, .file:
             return log.map { ($0.lines, $0.cut) }
+        case .guardEntry:
+            return entry.map { ($0.rawText.components(separatedBy: "\n"), false) }
         }
     }
 
     private var fromTop: Bool {
-        if case .file(_, let top) = subject { return top }
-        return false
+        switch subject {
+        case .file(_, let top): return top
+        // an event's lines are a small document: read from the first
+        case .guardEntry: return true
+        default: return false
+        }
     }
 
     private var isGone: Bool {
         switch subject {
         case .run, .job: model.hasLoaded && found == nil
         case .log, .file: log?.gone == true
+        case .guardEntry: entryLooked && entry == nil
         }
     }
 
@@ -81,6 +97,7 @@ struct RawOutputScreen: View {
         case .job(let id): model.rows.first { $0.jobID == id }?.displayTitle ?? "Job"
         case .log(let raw): EngineLog(rawValue: raw).map(Names.log) ?? raw
         case .file(let url, _): url.lastPathComponent
+        case .guardEntry: entry?.title ?? Names.Screen.memoryGuard
         }
     }
 
@@ -135,6 +152,7 @@ struct RawOutputScreen: View {
         switch subject {
         case .job: ("This Run Is No Longer Recorded", "It is not in this session, and the list of past runs no longer has it.")
         case .file, .log: ("This File Is Gone", "It is no longer where it was; it may have been moved or deleted.")
+        case .guardEntry: (Names.Guard.eventGone, "It has aged out of the log, so there is nothing more to show.")
         default: ("This Run Is No Longer in the Log", "The log has moved on since this entry was listed.")
         }
     }
@@ -152,6 +170,9 @@ struct RawOutputScreen: View {
             log = await Task.detached(priority: .userInitiated) {
                 top ? Self.readHead(url, lines: keep, bytes: bytes) : Self.readTail(url, lines: keep, bytes: bytes)
             }.value
+        case .guardEntry(let id):
+            entry = await GuardOpenedRows.loaded(id: id)
+            entryLooked = true
         }
     }
 
