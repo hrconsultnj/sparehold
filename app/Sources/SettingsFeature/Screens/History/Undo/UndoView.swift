@@ -2,117 +2,281 @@ import SwiftUI
 import AnalyzersKit
 import UIComponents
 
-/// Undo: what can be brought back, and what happened to the rest. Level 2 is the
-/// two kinds of thing it holds (moved to the Trash, stopped dev servers); level 3
-/// is the cleanup run (or the guard's day) as ONE parent row with its count and
-/// total, opening to what it moved. Runs with something to restore come first
-/// and open; runs whose Trash has been emptied are closed and say so once.
+/// Undo: what Sparehold moved to the Trash, and what can still be brought
+/// back. Level 2 is the two kinds of thing it holds (moved to the Trash,
+/// stopped dev servers); level 3 is the Trash's summary and the cleanups
+/// themselves, one row each, opening to the cleanup's own screen where the
+/// Restore actions live — no rows open in place.
 ///
-/// One table for the whole history (`OutlineTable`): days are section-header rows,
-/// runs are groups, items are rows; newest first, so nothing sorts.
+/// One load reads the real Trash ONCE (`TrashSnapshot`) and judges every
+/// receipt against it; each cleanup then sits in exactly one of two groups:
+/// Restorable (everything or something it moved can be put back) and Emptied
+/// (none of it can) — the screen's summary chips ARE those two groups, so the
+/// chips, the rows and the subtitle can never disagree. When the Trash cannot
+/// be read at all, the screen says exactly that instead of claiming it was
+/// emptied.
 ///
 /// This file is the screen's state and its composition. One job per file:
-///   UndoNode.swift           the rows of the table, built from the history
-///   UndoView+Row.swift       what a run's row and an item's row show and do
-///   UndoView+Actions.swift   loading the history, restoring, copying a command
+///   UndoView+Actions.swift     loading the history, re-reading the Trash, copying a command
+///   UndoCleanupScreen.swift    the cleanup screen a row opens (its rows and Restore actions)
+///   UndoNode.swift             the rows of a cleanup's table
 struct UndoView: View {
 
     @Environment(Navigator.self) var navigator
-    @State var entries: [UndoEntry] = []
-    @State var loaded = false
+    /// One load's history and Trash read; the groups are derived from it.
+    @State var model: UndoModel?
     @State var scope: UndoEntry.Scope = .trashed
-    @State var restoreError: String?
-    /// A restore is running: every Restore button is disabled until it finishes.
-    @State var restoring = false
     @State var copiedID: String?
-    /// The rows of the table for the chosen kind, built when the history or the kind changes.
-    @State var nodes: [UndoNode] = []
-    @State var selection: Set<String> = []
-    /// Which runs are open, kept across window close and relaunch.
-    @State var open = RememberedExpansion<String>(screen: "undo")
 
     private var tabItems: [ScopeTabItem<UndoEntry.Scope>] {
         UndoEntry.Scope.allCases.map { kind in
             ScopeTabItem(value: kind, title: title(kind), symbol: kind == .trashed ? "trash" : "hand.raised",
-                         count: entries.filter { $0.scope == kind }.count)
+                         count: model?.entries.filter { $0.scope == kind }.count)
         }
     }
 
     var body: some View {
         DataScreen(title: Names.Screen.undo, subtitle: subtitle) { content }
+            .helpTopic(.trashVsUndo, screen: Names.Screen.undo)
             .scopeTabsToolbar(screen: "undo", items: tabItems, selection: $scope)
-            .alert("Couldn't Restore", isPresented: Binding(get: { restoreError != nil },
-                                                            set: { if !$0 { restoreError = nil } })) {
-                Button("OK") { restoreError = nil }
-            } message: {
-                Text(restoreError ?? "")
+            .toolbar {
+                // the one "sync" control: what was emptied in the Finder while the
+                // screen sat open shows up the moment this is pressed
+                if scope == .trashed, model != nil {
+                    ToolbarItem {
+                        Button("Check the Trash Again", systemImage: "arrow.clockwise") { refresh() }
+                            .help("Read the Trash again, past the cache")
+                    }
+                }
             }
             .task {
-                // `undo:trashed`, `undo:servers`, `undo:opened`: which kind, and whether every run is open
-                var openAll = false
+                // `undo:trashed`, `undo:servers`, `undo:opened`: which kind to show
                 switch navigator.takeIntent(for: HistoryGroup.undo) {
                 case "servers": scope = .stopped
-                case "opened": scope = .trashed; openAll = true
+                case "opened", "trashed": scope = .trashed
                 default: break
                 }
                 await load()
-                if openAll { open.ids.formUnion(nodes.flatMap { $0.children ?? [] }.map(\.id)) }
             }
-            .onChange(of: scope) { rebuild() }
     }
 
     @ViewBuilder private var content: some View {
-        if loaded && nodes.isEmpty {
-            empty
-        } else {
-            OutlineTable(nodes, children: \.children, selection: $selection,
-                         expanded: open.binding, autosave: "undo") {
-                OutlineColumn("name", Names.Column.name) { UndoRowLabel(node: $0) }
-                    .lines { $0.lineCount }
-                OutlineColumn("action", "") { node in UndoRowAction(node: node, view: self) }
-                    .hideable(false)
-                    .width(min: 110, ideal: 120, max: 160)
-                    .alignment(.trailing)
-            }
-            .columnHeaders(.hidden)
-            // a history of runs, not a table of values: no stripes behind the rows
-            .alternatingRows(false)
-            .sectionHeader { $0.header }
-            .contextMenu({ ids in UndoRowMenu(nodes: nodes, ids: ids, view: self) })
-            .emptyContent(isLoading: !loaded) { EmptyView() }
+        switch scope {
+        case .trashed: trashed
+        case .stopped: stopped
         }
     }
 
-    /// Rebuilds the rows for the chosen kind, and keeps every day open as it appears:
-    /// a day is a header, the person closes it only while looking.
-    func rebuild() {
-        nodes = UndoNode.tree(entries.filter { $0.scope == scope })
-        open.ids.formUnion(nodes.map(\.id))
+    // MARK: - the Trash tab: the summary chips, then the cleanups as rows
+
+    @ViewBuilder private var trashed: some View {
+        if let model {
+            if model.entries.contains(where: { $0.scope == .trashed }) {
+                if model.trash.access == .unreadable {
+                    unreadTrash(model.trash)
+                } else {
+                    cleanupList(model.reconciliation)
+                }
+            } else {
+                EmptyState("Nothing Moved to the Trash Yet", systemImage: "trash",
+                           description: Text("The Trash is macOS's own; Undo is Sparehold's record of what it moved "
+                               + "there and whether it can still be put back. When a cleanup moves something, it shows up here."))
+            }
+        } else {
+            LoadingState("Reading the history…")
+        }
+    }
+
+    /// The screen's two groups: the chips are their headers, so the summary and
+    /// the rows are one truth. Restorable first; the emptied history below,
+    /// drawn dimmed. A row only opens — the cleanup's screen holds the actions.
+    private func cleanupList(_ reconciliation: UndoReconciliation) -> some View {
+        List {
+            if !reconciliation.restorable.cleanups.isEmpty {
+                Section(header: Text(restorableHeader(reconciliation.restorable))) {
+                    ForEach(reconciliation.restorable.cleanups) { run in
+                        CleanupRow(run: run, emptied: false) { open(run) }
+                    }
+                }
+            }
+            if !reconciliation.emptied.cleanups.isEmpty {
+                Section(header: Text(emptiedHeader(reconciliation.emptied))) {
+                    ForEach(reconciliation.emptied.cleanups) { run in
+                        CleanupRow(run: run, emptied: true) { open(run) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Restorable: 3 cleanups · 214 items · 1.2 GB" — what can really be put back.
+    private func restorableHeader(_ group: UndoReconciliation.Group) -> String {
+        var parts = [plural(group.cleanups.count, "cleanup", "cleanups"),
+                     plural(group.restorableItems, "item", "items")]
+        if group.restorableBytes > 0 { parts.append(ByteSize.text(group.restorableBytes, .headline)) }
+        return "Restorable: " + parts.joined(separator: " · ")
+    }
+
+    /// "Emptied: 605 items — can't be brought back".
+    private func emptiedHeader(_ group: UndoReconciliation.Group) -> String {
+        "Emptied: " + plural(group.totalItems, "item", "items") + " — can't be brought back"
+    }
+
+    private func open(_ run: UndoRun) {
+        navigator.push(.history(.cleanup(run.id)))
+    }
+
+    /// The failed read, exactly as failed: the screen refuses to guess whether
+    /// the Trash was emptied when it cannot see the Trash.
+    private func unreadTrash(_ trash: TrashSnapshot) -> some View {
+        UnreadTrashState(trash: trash) { refresh() }
+    }
+
+    // MARK: - the guard's tab: one row per stopped server, its command to copy
+
+    private var stopped: some View {
+        let runs = UndoHistory.days((model?.entries ?? []).filter { $0.scope == .stopped })
+        return Group {
+            if runs.isEmpty {
+                EmptyState("No Servers Stopped", systemImage: "hand.raised",
+                           description: Text("The guard has not stopped anything recently."))
+            } else {
+                List {
+                    ForEach(runs) { day in
+                        Section(header: Text(day.title(now: Date()))) {
+                            ForEach(day.runs.flatMap(\.entries)) { entry in
+                                StoppedRow(entry: entry, view: self)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - the words that match reality
+
+    private var subtitle: String {
+        guard let model else { return "Reading the history…" }
+        switch scope {
+        case .trashed:
+            guard model.trash.access == .readable else { return "The Trash can't be read right now" }
+            let restorable = model.reconciliation.restorable.restorableItems
+            return restorable > 0 ? plural(restorable, "item", "items") + " can still be restored"
+                                  : "Nothing in the Trash can be restored"
+        case .stopped:
+            let count = model.entries.filter { $0.scope == .stopped }.count
+            return count > 0 ? plural(count, "server", "servers") + " stopped in the last 90 days"
+                             : "No servers stopped recently"
+        }
     }
 
     private func title(_ kind: UndoEntry.Scope) -> String {
         kind == .trashed ? "Moved to the Trash" : "Stopped Dev Servers"
     }
 
-    private var subtitle: String {
-        guard loaded else { return "Reading the history…" }
-        let restorable = entries.filter(\.isRestorable).count
-        return restorable > 0 ? "\(restorable) can still be restored" : "Nothing waiting to be restored"
+    private func plural(_ count: Int, _ one: String, _ many: String) -> String {
+        count == 1 ? "1 \(one)" : "\(count) \(many)"
+    }
+}
+
+/// One cleanup as a row: who ran it and when, what it holds, and its state
+/// against the Trash as the badge — "Restorable", "3 of 5", "Emptied". The
+/// whole row opens the cleanup's screen.
+private struct CleanupRow: View {
+    let run: UndoRun
+    let emptied: Bool
+    let action: () -> Void
+
+    var body: some View {
+        OverviewRow(action: action) {
+            HStack {
+                Label {
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(run.by).fontWeight(emptied ? .regular : .medium)
+                            if let when = run.when {
+                                Text("· \(when.formatted(.dateTime.month().day().hour().minute()))")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(rowDetail).font(.caption).foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(emptied ? Color.secondary : Color.teal)
+                }
+                Spacer(minLength: 8)
+                badge
+            }
+            .contentShape(Rectangle())
+        }
+        .foregroundStyle(emptied ? .secondary : .primary)   // the emptied history reads dimmed
     }
 
-    /// Centred in the window (`DataScreen` puts its content at the top left).
-    private var empty: some View {
-        emptyMessage.frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var rowDetail: String {
+        var parts = [plural(run.count, "item", "items")]
+        if run.totalBytes > 0 { parts.append(ByteSize.text(run.totalBytes, .cell)) }
+        return parts.joined(separator: " · ")
     }
 
-    @ViewBuilder private var emptyMessage: some View {
-        switch scope {
-        case .trashed:
-            EmptyState("Nothing in the Trash From Cleanups", systemImage: "trash",
-                       description: Text("When a cleanup moves something to the Trash, it is listed here so you can put it back."))
-        case .stopped:
-            EmptyState("No Servers Stopped", systemImage: "hand.raised",
-                       description: Text("The guard has not stopped anything recently."))
+    @ViewBuilder private var badge: some View {
+        switch run.trashState {
+        case .restorable:
+            BadgeCapsule(text: "Restorable", color: .teal)
+        case .partial(let restorable):
+            BadgeCapsule(text: "\(restorable) of \(run.count)", color: .teal)
+        case .emptied:
+            BadgeCapsule(text: "Emptied", color: .secondary)
+        }
+    }
+
+    private func plural(_ count: Int, _ one: String, _ many: String) -> String {
+        count == 1 ? "1 \(one)" : "\(count) \(many)"
+    }
+}
+
+/// One stopped server as a row: what it was, why it was stopped, and the
+/// command to bring it back — the action lives on the row itself.
+private struct StoppedRow: View {
+    let entry: UndoEntry
+    let view: UndoView
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.title)
+                Text(entry.outcome).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if case .stopped(let event) = entry.source {
+                Button(view.copiedID == event.id ? "Copied" : "Copy Command") { view.copy(event) }
+                    .controlSize(.small)
+                    .help(event.processName.count >= 140
+                          ? "Recorded before the app kept full command lines, so part of it may be missing"
+                          : "The command as the guard recorded it; you still supply the folder and environment")
+            }
+        }
+    }
+}
+
+/// The one state both Undo screens show when the Trash cannot be read: what
+/// happened, what fixes it, and the button that reads it again. Never a claim
+/// about what is still in the Trash — a Trash that cannot be seen proves
+/// nothing about what was emptied.
+struct UnreadTrashState: View {
+    let trash: TrashSnapshot
+    let refresh: () -> Void
+
+    var body: some View {
+        EmptyState {
+            Label("Can't Read the Trash Right Now", systemImage: "trash.slash")
+        } description: {
+            Text("macOS isn't letting Sparehold look in the Trash, so it can't say what is still in it."
+                + (trash.failureText.map { " (\($0))" } ?? "")
+                + " Allow Full Disk Access in System Settings › Privacy & Security, then check again.")
+        } actions: {
+            Button("Check Again") { refresh() }
         }
     }
 }

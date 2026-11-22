@@ -115,7 +115,7 @@ public enum ActivityJoin {
                 needsReview: false, findings: 0, freedBytes: 0, memoryBytes: 0, closed: 0))
         }
 
-        markNeedsReview(&rows, now: now, dismissed: dismissed)
+        markNeedsReview(&rows, dismissed: dismissed)
         return rows
     }
 
@@ -224,12 +224,13 @@ public enum ActivityJoin {
     // MARK: - needs review
 
     /// "Waiting for your review" means what the app can actually do: a preview
-    /// the store holds, finished within `JobStore.reviewWindow`, not dismissed,
-    /// that found something, and that no newer run of the same task has replaced.
-    /// An older preview, or one found in a log, is still listed with what it
-    /// found, as found-but-not-applied: the app cannot apply it, and the way
-    /// forward is a new preview.
-    private static func markNeedsReview(_ rows: inout [ActivityRow], now: Date, dismissed: Set<UUID>) {
+    /// the store still holds, not dismissed, that found something, and that no
+    /// newer run of the same task has replaced. Age is not part of it — an older
+    /// preview still applies, and the engine skips anything that no longer
+    /// exists. One found only in a log (this app did not start it, or the app
+    /// has since been quit) is listed with what it found, as
+    /// found-but-not-applied: the way forward there is a new preview.
+    private static func markNeedsReview(_ rows: inout [ActivityRow], dismissed: Set<UUID>) {
         var newest: [String: Int] = [:]
         // a restore is not a run of the task: it must not replace the waiting preview before it
         for (position, row) in rows.enumerated() where row.status == .done && row.intent != .run && !row.isRestore {
@@ -241,8 +242,7 @@ public enum ActivityJoin {
         for position in newest.values {
             let row = rows[position]
             guard row.intent == .preview, row.findings > 0, case .live(let id) = row.source,
-                  !dismissed.contains(id), let end = row.finished,
-                  now.timeIntervalSince(end) <= JobStore.reviewWindow else { continue }
+                  !dismissed.contains(id) else { continue }
             rows[position].needsReview = true
         }
     }

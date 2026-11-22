@@ -58,6 +58,7 @@ struct AskHomeView: View {
             healthSummary = Self.summarizeHealth()
             history.loadIfNeeded()
         }
+        .helpTopic(.askAgent, screen: Names.Screen.ask)
     }
 
     // MARK: - the grid (b: 2×2 of template cards)

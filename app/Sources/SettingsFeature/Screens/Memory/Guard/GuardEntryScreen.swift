@@ -1,5 +1,6 @@
 import SwiftUI
 import AnalyzersKit
+import UIComponents
 
 /// One guard event on its own screen: what happened, the program it was about
 /// (named, with the app or project, the memory it held at the time and
@@ -9,6 +10,7 @@ import AnalyzersKit
 struct GuardEntryScreen: View {
     let id: String
 
+    @Environment(Navigator.self) private var navigator
     @State private var row: GuardHistory.Row?
     @State private var report: CrisisReportSummary?
     @State private var stillRunning: Bool?
@@ -66,11 +68,20 @@ struct GuardEntryScreen: View {
                 }
             }
             Section {
-                // one disclosed block, not rows: the raw lines
-                DisclosureGroup(Names.Guard.showRawLines) {
-                    Text(row.rawText)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
+                // the log's own lines are one level down, on the shared raw-output screen
+                Button { navigator.push(.overview(.raw(.guardEntry(id)))) } label: {
+                    LabeledContent {
+                        HStack(spacing: Tokens.Space.s) {
+                            Text("\(lineCount(row)) lines")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                    } label: {
+                        Text(Names.Guard.showRawLines)
+                    }
                 }
             }
         }
@@ -109,6 +120,11 @@ struct GuardEntryScreen: View {
         return row.isGroup
             ? "\(row.start.formatted(style)) to \(row.end.formatted(style))"
             : row.start.formatted(style)
+    }
+
+    /// How many lines the raw-output screen will hold: one log line per entry in the row.
+    private func lineCount(_ row: GuardHistory.Row) -> Int {
+        row.rawText.components(separatedBy: "\n").count
     }
 
     private func load() async {

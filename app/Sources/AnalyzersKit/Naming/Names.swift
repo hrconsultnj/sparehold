@@ -66,17 +66,25 @@ public enum Names {
         public static let oldRecordings = "Old Recordings"
         public static let loginItems = "Login & Startup Items"
         public static let network = "Network"
+        public static let askAgent = "The Ask Agent"
         public static let whereWritten = "Where Everything Is Written"
         public static let editByHand = "Settings You Can Edit by Hand"
         public static let healthReport = "Mac Health Report"
         public static let privacy = "Privacy: Nothing Leaves This Mac"
+        public static let trashVsUndo = "Trash vs Undo"
         /// The row where Turn Off used to be: it moved to Setup.
         public static let turnOffMoved = "Turn Off or Remove"
+
+        // a topic's lesson sections (what it is, why it matters on this Mac, the actions, the one question)
+        public static let whyItMatters = "Why It Matters on This Mac"
+        public static let whatYouCanDo = "What You Can Do"
+        public static let commonQuestion = "A Common Question"
 
         /// Every name above, for the check.
         public static let all = [yourData, whatItDoes, whatItNeverDoes, whereItIsWritten, change, export, help, measures,
                                  guardSteps, guardNever, rowLocks, cleanup, safeToRemove, downloadsTemp, timeMachine, unusedApps,
-                                 oldRecordings, loginItems, network, whereWritten, editByHand, healthReport, privacy, turnOffMoved]
+                                 oldRecordings, loginItems, network, askAgent, whereWritten, editByHand, healthReport, privacy,
+                                 trashVsUndo, turnOffMoved, whyItMatters, whatYouCanDo, commonQuestion]
     }
 
     // MARK: - the sidebar's own button and menu words
@@ -564,6 +572,14 @@ public enum Names {
     public enum Report {
         public static let memory = "Memory Report"
         public static let storage = "Storage Report"
+        /// The reader's list of the report's sections, under the front matter.
+        public static let contents = "Contents"
+        /// The toolbar menu that opens a section's screen.
+        public static let sections = "Sections"
+        /// A report section that is not in the file any more (it was rewritten shorter, or moved).
+        public static let sectionGone = "This Section Is Gone"
+        /// A section's place in its report, on the screen that holds it: "Section 2 of 7".
+        public static func section(_ index: Int, of total: Int) -> String { "Section \(index + 1) of \(total)" }
     }
 
     /// The scopes of the Network screen.
@@ -627,6 +643,12 @@ public enum Names {
         public static let putBack = "Put Back"
     }
 
+    /// What the Undo screen is, said where its rows are listed: what Undo does that the
+    /// Trash alone does not.
+    public enum Undo {
+        public static let explains = "Undo reverses a cleanup by name: it puts back exactly what that cleanup moved, even after the Trash has been emptied of other things."
+    }
+
     // MARK: - lookups by type
 
     /// The screen a receipt ledger belongs to, by the source name `UndoLedger.ledgers` gives it.
@@ -682,8 +704,13 @@ public enum Names {
     public enum Review {
         public static let selectAll = "Select All"
         public static let selectNone = "Select None"
-        public static let previewAgain = "Preview Again"
-        public static let preview = "Preview"
+        /// Re-runs the analysis behind a list already on screen.
+        public static let previewAgain = "Refresh This List"
+        /// Starts the analysis: what a screen looks for before it shows a review.
+        public static let preview = "Find What to Clean"
+        /// The one apply button of a review that is not worded by its setting
+        /// (`CleanWords`): what a finished preview's results offer.
+        public static let applyNow = "Clean Selected Now"
         public static let stop = "Stop"
         public static let history = "History"
         public static let showRawOutput = "Show Raw Output"
@@ -695,6 +722,17 @@ public enum Names {
         public static let showInFinder = "Show in Finder"
         public static let copyPath = "Copy Path"
         public static let copyPaths = "Copy Paths"
+
+        // MARK: sentences (not names: the probe does not judge them)
+
+        /// An older preview's apply stays on; the engine skips paths that are gone,
+        /// so what the person reviewed can only shrink at apply time.
+        public static let staleWarning = "Some entries may have changed since this preview — the cleanup skips anything that no longer exists."
+        /// What a Trash cleanup means for the screen it is on, and how Undo differs from the Trash:
+        /// one plain line under every apply bar of a cleanup that moves to the Trash.
+        public static let trashFootnote = "Moves to the Trash — recoverable from the Trash for 30 days. Undo reverses this exact cleanup, item by item."
+        /// The same line for a cleanup that does not use the Trash at all.
+        public static let permanentFootnote = "Deleted outright, not moved to the Trash — Undo has nothing to reverse."
     }
 
     public enum Raw {
@@ -943,7 +981,8 @@ public enum Names {
                  Startup.leftover, Startup.possibleLeftover, Startup.notChecked, Startup.removed,
                  Startup.categoryApps, Startup.categoryBackground, Startup.categoryLeftovers,
                  Startup.categoryChanges, Startup.filterAdministrator, Startup.filterNotChecked].map { ("Startup", $0) }
-        rows += [Report.memory, Report.storage].map { ("Report", $0) }
+        rows += [Report.memory, Report.storage, Report.contents, Report.sections,
+                 Report.sectionGone].map { ("Report", $0) }
         rows += [NetworkScope.snapshot, NetworkScope.history].map { ("Network", $0) }
         rows += [State.upToDate, State.updateAvailable, State.developmentBuild].map { ("State", $0) }
         rows += [Scope.all, Scope.running, Scope.needsReview, Scope.failed].map { ("Scope", $0) }

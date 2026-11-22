@@ -5,14 +5,18 @@ import UIComponents
 
 /// Reports: the memory and storage reports the analyzers write, as a reader.
 /// The list of reports is on the left, named for when each was written; the
-/// selected one is drawn on the right as a document, not as raw text.
+/// selected one is drawn on the right as a document, not as raw text — its
+/// front matter, then its sections as contents rows. A section is one level
+/// down: the row pushes the section's own screen (`ReportSectionScreen`), the
+/// way the Sections menu and the `reports:section:<n>` link do.
 ///
 /// One job per file next to it:
-///   ReportsModel.swift      the reports on disk, the open one, the jobs that write new ones
-///   ReportList.swift        the left side (the months and their reports)
-///   ReportBlocksView.swift  the right side: headings, tables, lists, code
+///   ReportsModel.swift        the reports on disk, the open one, the jobs that write new ones
+///   ReportList.swift          the left side (the months and their reports)
+///   ReportBlocksView.swift    the blocks a document draws, and what a contents row says
+///   ReportSectionScreen.swift the pushed screen: one section's blocks
 ///   (the Markdown as written is the shared RawOutputScreen, opened from the top)
-///   ReportFile.swift        what Export hands to the save panel
+///   ReportFile.swift          what Export hands to the save panel
 ///
 /// The Memory / Storage tabs are the shared bar under the toolbar (`scopeTabsToolbar`). Toolbar:
 /// Write Report stays; Past Runs, Stop, Sections, Export and Show Source are
@@ -23,11 +27,8 @@ struct ReportsView: View {
     @Environment(Navigator.self) private var navigator
     @State private var model = ReportsModel()
     @State private var kind: ReportDocument.Kind = .memory
-    @State private var expanded: Set<String> = []
     /// The months that are open, kept across window close and relaunch.
     @State private var monthsOpen = RememberedExpansion<String>(screen: "reports")
-    /// The section a "Sections" menu entry asked to scroll to.
-    @State private var jumpTo: String?
     @State private var exporting = false
 
     private var months: [ReportMonth] { ReportMonth.months(of: model.reports(of: kind)) }
@@ -66,12 +67,10 @@ struct ReportsView: View {
         .onChange(of: kind) {
             if model.selected?.kind != kind { model.selection = months.first?.reports.first?.id }
         }
-        .onChange(of: model.selection) { openFirstSections() }
         // the newest month starts open; never once a person opened or closed one
         .onChange(of: months.first?.id, initial: true) {
             monthsOpen.seedIfUntouched(months.first.map { [ReportList.key($0)] } ?? [])
         }
-        .onChange(of: model.sections) { openFirstSections() }
         // a link opened while Reports is already showing
         .onChange(of: navigator.pendingIntent) { applyPendingLink() }
         // when a report job ends, read what it wrote and show it
@@ -85,8 +84,7 @@ struct ReportsView: View {
 
     @ViewBuilder private var reader: some View {
         if let report = model.selected, model.blocksFor == report.id {
-            ReportBlocksView(preface: model.preface, sections: model.sections, expanded: $expanded,
-                             jumpTo: $jumpTo)
+            document(report)
         } else if model.selected != nil {
             LoadingState()
         } else {
@@ -99,9 +97,44 @@ struct ReportsView: View {
         }
     }
 
-    /// A report opens with its first two sections open; the rest are one click each.
-    private func openFirstSections() {
-        expanded = Set(model.sections.prefix(2).map(\.id))
+    /// The open report's front matter, then its sections as contents rows — each
+    /// row one level down, pushing the section's own screen.
+    private func document(_ report: ReportDocument) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(model.preface.enumerated()), id: \.offset) { _, block in ReportBlocksView.block(block) }
+                contents(of: report)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder private func contents(of report: ReportDocument) -> some View {
+        if !model.sections.isEmpty {
+            Text(Names.Report.contents).font(.title3.bold()).padding(.top, 6)
+            ForEach(model.sections) { section in
+                Button {
+                    navigator.push(.system(.reportSection(report: report.id, index: section.index)))
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(section.title)
+                            if let preview = section.preview {
+                                Text(preview).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private var tabs: [ScopeTabItem<ReportDocument.Kind>] {
@@ -150,16 +183,17 @@ struct ReportsView: View {
             Menu {
                 ForEach(model.sections) { section in
                     Button(section.title) {
-                        expanded.insert(section.id)
-                        jumpTo = section.id
+                        if let report = model.selected {
+                            navigator.push(.system(.reportSection(report: report.id, index: section.index)))
+                        }
                     }
                 }
             } label: {
-                Label("Sections", systemImage: "list.number")
+                Label(Names.Report.sections, systemImage: "list.number")
             }
             .labelStyle(.titleAndIcon)
             .disabled(model.sections.isEmpty)
-            .help("Jump to a section of this report")
+            .help("Open a section of this report")
         }
         .toolbarRank(.secondary)
 
@@ -200,14 +234,14 @@ struct ReportsView: View {
             let all = months.flatMap(\.reports)
             if all.indices.contains(n) { model.selection = all[n].id }
         }
-        // month:<n> opens the nth month; section:<n> jumps to the nth section
+        // month:<n> opens the nth month; section:<n> opens the nth section's screen
         if payload.hasPrefix("month:"), let n = Int(payload.dropFirst("month:".count)), months.indices.contains(n) {
             let open = monthsOpen.binding
             open.wrappedValue.insert(ReportList.key(months[n]))
         }
-        if payload.hasPrefix("section:"), let n = Int(payload.dropFirst("section:".count)), model.sections.indices.contains(n) {
-            expanded.insert(model.sections[n].id)
-            jumpTo = model.sections[n].id
+        if payload.hasPrefix("section:"), let n = Int(payload.dropFirst("section:".count)),
+           model.sections.indices.contains(n), let report = model.selected {
+            navigator.push(.system(.reportSection(report: report.id, index: model.sections[n].index)))
         }
         if payload == "storage" { kind = .storage }
         if payload == "memory" { kind = .memory }

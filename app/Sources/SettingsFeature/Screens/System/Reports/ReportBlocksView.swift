@@ -1,45 +1,17 @@
 import AnalyzersKit
 import SwiftUI
 
-/// A report, drawn the way a document reads: headings, paragraphs, lists,
-/// tables and code, with text you can select.
+/// Report blocks drawn the way a document reads: headings, paragraphs, lists,
+/// tables and code, with text you can select. The Reports reader draws its front
+/// matter with it and a section screen (`ReportSectionScreen`) draws the whole
+/// section; both scroll it themselves, so this is only the drawing.
 struct ReportBlocksView: View {
-    let preface: [MarkdownBlock]
-    let sections: [ReportSection]
-    /// The titles of the sections that are open.
-    @Binding var expanded: Set<String>
-    /// A section to scroll to (set by the Sections menu, cleared once done).
-    @Binding var jumpTo: String?
+    let blocks: [MarkdownBlock]
 
     var body: some View {
-        ScrollViewReader { proxy in
-            content
-                .onChange(of: jumpTo) {
-                    guard let title = jumpTo else { return }
-                    withAnimation { proxy.scrollTo(title, anchor: .top) }
-                    jumpTo = nil
-                }
-        }
-    }
-
-    private var content: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(preface.enumerated()), id: \.offset) { _, block in view(for: block) }
-                ForEach(sections) { section in
-                    // one disclosed block, not rows: a report section, in a scroll view (no list)
-                    DisclosureGroup(isExpanded: Binding(get: { expanded.contains(section.id) },
-                                                        set: { if $0 { expanded.insert(section.id) } else { expanded.remove(section.id) } })) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(Array(section.blocks.enumerated()), id: \.offset) { _, block in view(for: block) }
-                        }
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } label: {
-                        Text(section.title).font(.title3.bold())
-                    }
-                    .id(section.id)
-                }
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in Self.block(block) }
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -47,18 +19,18 @@ struct ReportBlocksView: View {
         }
     }
 
-    @ViewBuilder private func view(for block: MarkdownBlock) -> some View {
+    @ViewBuilder static func block(_ block: MarkdownBlock) -> some View {
         switch block {
         case .heading(let level, let text):
-            Text(Self.styled(text)).font(font(forLevel: level)).padding(.top, level <= 2 ? 6 : 0)
+            Text(styled(text)).font(font(forLevel: level)).padding(.top, level <= 2 ? 6 : 0)
         case .paragraph(let text):
-            Text(Self.styled(text))
+            Text(styled(text))
         case .bullets(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline) {
                         Text("•").foregroundStyle(.secondary).accessibilityHidden(true)
-                        Text(Self.styled(item))
+                        Text(styled(item))
                     }
                 }
             }
@@ -67,7 +39,7 @@ struct ReportBlocksView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline) {
                         Text("\(index + 1).").foregroundStyle(.secondary).monospacedDigit()
-                        Text(Self.styled(item))
+                        Text(styled(item))
                     }
                 }
             }
@@ -81,13 +53,13 @@ struct ReportBlocksView: View {
                 }
             }
         case .quote(let text):
-            GroupBox { Text(Self.styled(text)).foregroundStyle(.secondary) }
+            GroupBox { Text(styled(text)).foregroundStyle(.secondary) }
         case .rule:
             Divider()
         }
     }
 
-    private func font(forLevel level: Int) -> Font {
+    private static func font(forLevel level: Int) -> Font {
         switch level {
         case 1: .largeTitle.bold()
         case 2: .title2.bold()
@@ -102,6 +74,22 @@ struct ReportBlocksView: View {
         (try? AttributedString(markdown: text,
                                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+    }
+}
+
+/// What a contents row says under a section's title: the section's opening line,
+/// so the list reads like a table of contents. A section that opens with
+/// something else (a table, code) has none — a cut fragment would say less than
+/// the title already does.
+extension ReportSection {
+    var preview: String? {
+        for block in blocks {
+            if case .paragraph(let text) = block {
+                let line = text.components(separatedBy: "\n").first ?? text
+                return line.count > 140 ? line.prefix(140) + "…" : line
+            }
+        }
+        return nil
     }
 }
 

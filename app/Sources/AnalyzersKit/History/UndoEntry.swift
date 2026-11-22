@@ -181,10 +181,13 @@ public struct UndoDay: Identifiable, Sendable {
 
 public enum UndoHistory {
 
-    /// Everything the Undo screen lists, newest first.
-    public static func entries(now: Date = Date()) -> [UndoEntry] {
+    /// Everything the Undo screen lists, newest first. `trashReadable` says
+    /// whether the real Trash could be listed this load (`TrashSnapshot`):
+    /// when it could not, a receipt whose Trash copy cannot be found is
+    /// "can't tell", never "the Trash has been emptied".
+    public static func entries(now: Date = Date(), trash: URL = UndoLedger.trashDir, trashReadable: Bool) -> [UndoEntry] {
         let dates = receiptDates()
-        let trashed = trashedEntries(UndoLedger.trashedItems(), dates: dates)
+        let trashed = trashedEntries(UndoLedger.trashedItems(trash: trash), dates: dates, trashReadable: trashReadable)
         let stopped: [UndoEntry] = GuardLogParser.allEvents(fromLog: AnalyzersPaths.guardLog, within: 90 * 86_400)
             .filter(\.isKill).map { event in
                 var outcome = "Stopped by \(Names.Screen.memoryGuard)"
@@ -198,24 +201,28 @@ public enum UndoHistory {
         return (trashed + stopped).sorted { ($0.when ?? .distantPast) > ($1.when ?? .distantPast) }
     }
 
-    /// Test support: the Trash entries of ONE receipt log, built exactly as the screen builds them.
+    /// Test support: the Trash entries of ONE receipt log, built exactly as the screen builds them
+    /// (the fixture Trash the probe builds is always readable).
     @_spi(TestSupport) public static func trashedEntries(ledger: URL, source: String, trash: URL) -> [UndoEntry] {
         let dates = receiptDates(runs: LogParser.runs(at: ledger), log: ledger.lastPathComponent)
-        return trashedEntries(UndoLedger.trashedItems(in: ledger, source: source, trash: trash), dates: dates)
+        return trashedEntries(UndoLedger.trashedItems(in: ledger, source: source, trash: trash),
+                              dates: dates, trashReadable: true)
     }
 
-    private static func trashedEntries(_ items: [TrashedItem], dates: [String: (date: Date, run: String, app: String?)]) -> [UndoEntry] {
+    private static func trashedEntries(_ items: [TrashedItem], dates: [String: (date: Date, run: String, app: String?)],
+                                       trashReadable: Bool) -> [UndoEntry] {
         items.map { item in
             let by = Names.screen(forLedgerSource: item.source)
             let size = ByteSize.parse(item.sizeText) ?? 0
             let app = dates[item.originalPath]?.app
+            let gone = item.restorability == .trashCopyGone
             return UndoEntry(
                 id: "trashed:" + item.id, source: .trashed(item), scope: .trashed,
                 title: title(for: item, appPath: app),
                 outcome: "Moved to the Trash by \(by) · \(item.sizeText)" + diskNote(item)
-                    + (item.restorability == .trashCopyGone ? " — the Trash has since been emptied" : ""),
+                    + (gone ? (trashReadable ? " — the Trash has since been emptied" : " — the Trash can't be read right now") : ""),
                 when: dates[item.originalPath]?.date, by: by,
-                restore: restore(for: item.restorability), sizeBytes: size,
+                restore: restore(for: item.restorability, trashReadable: trashReadable), sizeBytes: size,
                 runID: dates[item.originalPath]?.run ?? "undated:" + item.ledger.lastPathComponent,
                 appPath: app)
         }
@@ -265,12 +272,17 @@ public enum UndoHistory {
         return " · on \(parts[1])"
     }
 
-    static func restore(for state: TrashedItem.Restorability) -> UndoEntry.Restore {
+    /// What one item's restorability says to the person. `trashReadable` false
+    /// turns "the Trash has been emptied" into "can't tell": a Trash the app
+    /// cannot read right now proves nothing about what is in it.
+    static func restore(for state: TrashedItem.Restorability, trashReadable: Bool) -> UndoEntry.Restore {
         switch state {
         case .restorable:
             return .available
         case .trashCopyGone:
-            return .unavailable(reason: "The Trash has been emptied, so this can't be brought back.")
+            return .unavailable(reason: trashReadable
+                ? "The Trash has been emptied, so this can't be brought back."
+                : "The Trash can't be read right now, so the app can't tell whether this is still in it.")
         case .destinationUnknown:
             return .unavailable(reason: "It was moved before the app recorded where it came from. Drag it back from the Trash yourself.")
         case .pathOccupied:
@@ -312,5 +324,48 @@ public enum UndoHistory {
             }
         }
         return dates
+    }
+
+    // MARK: - the Trash reconciliation
+
+    /// The screen's true picture of the Trash: every cleanup (a run of the
+    /// trashed scope) in exactly one of two groups — what can still be put
+    /// back, and what cannot. A run that crossed midnight is one cleanup here,
+    /// however many days its entries span.
+    public static func reconcile(_ entries: [UndoEntry]) -> UndoReconciliation {
+        var merged: [String: UndoRun] = [:]
+        var order: [String] = []
+        for run in days(entries.filter { $0.scope == .trashed }).flatMap(\.runs) {
+            if let known = merged[run.id] {
+                merged[run.id] = UndoRun(id: run.id, by: run.by,
+                                         when: max(known.when ?? .distantPast, run.when ?? .distantPast),
+                                         entries: known.entries + run.entries)
+            } else {
+                merged[run.id] = run
+                order.append(run.id)
+            }
+        }
+        func group(_ keep: (UndoRun) -> Bool, countRestorable: Bool) -> UndoReconciliation.Group {
+            let runs = order.compactMap { merged[$0] }.filter(keep)
+                .sorted { ($0.when ?? .distantPast) > ($1.when ?? .distantPast) }
+            let counted = runs.flatMap { countRestorable ? $0.entries.filter(\.isRestorable) : $0.entries }
+            return UndoReconciliation.Group(
+                cleanups: runs,
+                restorableItems: countRestorable ? counted.count : 0,
+                totalItems: runs.reduce(0) { $0 + $1.count },
+                restorableBytes: counted.reduce(Int64(0)) { $0 + $1.sizeBytes })
+        }
+        return UndoReconciliation(
+            restorable: group({ $0.trashState != .emptied }, countRestorable: true),
+            emptied: group({ $0.trashState == .emptied }, countRestorable: false))
+    }
+
+    /// The cleanup a pushed screen was opened for: every trashed entry
+    /// recorded under the run id, however many days the run spans.
+    public static func cleanup(id: String, in entries: [UndoEntry]) -> UndoRun? {
+        let members = entries.filter { $0.scope == .trashed && $0.runID == id }
+        guard !members.isEmpty else { return nil }
+        return UndoRun(id: id, by: members[0].by, when: members.compactMap(\.when).max(),
+                       entries: members.sorted { $0.sizeBytes > $1.sizeBytes })
     }
 }

@@ -18,10 +18,11 @@ public final class JobStore {
 
     static let keepFinished = 200
 
-    /// How long a finished preview stays good enough to apply. The engine
-    /// re-derives its findings at apply time, so the longer the gap the less the
-    /// rows a person reviewed describe what would happen. The kernel enforces it
-    /// (`apply(from:approved:)`), so a screen cannot forget to.
+    /// How long a screen keeps adopting a finished preview of its own kind, and
+    /// how long a fence plan stays fresh. NOT an apply rule: an older preview is
+    /// still applied, and the engine re-derives its findings at apply time,
+    /// skipping every path that no longer exists, so what it touches can only
+    /// shrink to what the person reviewed.
     public nonisolated static let reviewWindow: TimeInterval = 15 * 60
 
     // MARK: test hooks
@@ -69,8 +70,6 @@ public final class JobStore {
     @ObservationIgnored private var appliesByPreview: [UUID: Job] = [:]
 
     @ObservationIgnored private let ledger: JobLedger
-    /// The clock the review window is measured on. The app's store always uses the real one.
-    @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var processes: [UUID: EngineProcess] = [:]
     @ObservationIgnored private var cancelRequested: Set<UUID> = []
     /// Index lines on their way to disk, so a quit can wait for them.
@@ -78,13 +77,6 @@ public final class JobStore {
 
     public init(ledger: JobLedger = .standard) {
         self.ledger = ledger
-        self.now = { Date() }
-    }
-
-    /// A store on a clock a probe controls, to show the review window without waiting for it.
-    @_spi(TestSupport) public init(ledger: JobLedger, clock: @escaping () -> Date) {
-        self.ledger = ledger
-        self.now = clock
     }
 
     /// Marks a job as dismissed so screens stop re-adopting it.
@@ -222,9 +214,11 @@ public final class JobStore {
     /// The only way to build a cleaner apply: from a finished preview, with the
     /// rows the user approved. The apply takes the preview's kind and options.
     ///
-    /// Refused, with a sentence a person can read, when the preview finished more
-    /// than `reviewWindow` ago or was dismissed (Discard): what was on screen is
-    /// no longer what an apply would act on.
+    /// Age is not a refusal: however old the preview, the engine re-derives its
+    /// findings at apply time and skips every path that no longer exists, so an
+    /// older review can only shrink what is touched. Refused, with a sentence a
+    /// person can read, only when the preview was discarded (Discard), its own
+    /// results were never found, or it has already been applied.
     @discardableResult
     public func apply(from preview: Job, approved: ApprovedSet) -> Job {
         // the apps to quit are the ones the review listed, not whatever the name list matches now
@@ -239,13 +233,11 @@ public final class JobStore {
             reason = "An apply must be built from a preview, not from a \(preview.intent.rawValue) job."
         } else if case .succeeded(let outcome) = preview.state {
             if case .newestFallback(let why) = outcome.match {
-                reason = "\(why) There is nothing reviewed to apply, so preview again."
+                reason = "\(why) There is nothing reviewed to apply, so refresh this list."
             } else if dismissed.contains(preview.id) {
-                reason = "That review was discarded, so it can't be applied. Preview again to see what would be cleaned now."
-            } else if let end = preview.finishedAt, now().timeIntervalSince(end) > Self.reviewWindow {
-                reason = "That review is more than \(Int(Self.reviewWindow / 60)) minutes old, so it can no longer be applied. Preview again to see what would be cleaned now."
+                reason = "That review was discarded, so it can't be applied. Refresh This List to see what would be cleaned now."
             } else if let prior = appliesByPreview[preview.id], prior.stillStands {
-                reason = "This preview has already been applied — preview again to see what is left."
+                reason = "This preview has already been applied — refresh this list to see what is left."
             } else {
                 reason = preview.kind.takesReviewedList && approved.isUnrestricted
                     ? "\(preview.kind.rawValue) needs the exact list of reviewed items, so nothing that appeared after the review can be touched."

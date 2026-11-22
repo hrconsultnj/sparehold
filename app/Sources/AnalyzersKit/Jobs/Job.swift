@@ -82,6 +82,12 @@ public final class Job: Identifiable {
     public private(set) var step: String?
     public private(set) var startedAt: Date?
     public private(set) var finishedAt: Date?
+
+    /// When a finished preview stops being something to apply (the review
+    /// window past its finish); nil while it runs. The screens adopt a preview
+    /// only while `now < reviewExpiry`, and the inspector's refusal sentence
+    /// carries the window's minutes from here — one definition, probe-testable.
+    public var reviewExpiry: Date? { finishedAt.map { $0.addingTimeInterval(JobStore.reviewWindow) } }
     /// The first run banner this job's own stdout printed. `RunMatcher` finds
     /// the log block that carries it.
     public private(set) var runHeader: String?

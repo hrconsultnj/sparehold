@@ -16,4 +16,18 @@ enum GuardOpenedRows {
     }
 
     static func row(id: String) -> GuardHistory.Row? { kept.first { $0.id == id } }
+
+    /// The row for an id, for every screen a row opens: the one the list opened, as the
+    /// list showed it, or — reached another way (a restored window, a link) — looked up
+    /// in the list's own read (shared, so nothing is read twice) and then in the longest
+    /// one. The entry screen and the raw-lines screen both come here, so they show the
+    /// same row the same way.
+    static func loaded(id: String) async -> GuardHistory.Row? {
+        var found = row(id: id)
+        if found == nil { found = await GuardHistoryModel.history(window: GuardHistoryModel.savedWindow())?.row(id: id) }
+        if found == nil {
+            found = await GuardHistoryModel.history(days: GuardHistory.windowDays)?.row(id: id)
+        }
+        return found
+    }
 }

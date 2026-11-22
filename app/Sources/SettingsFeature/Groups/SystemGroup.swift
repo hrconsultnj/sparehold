@@ -1,10 +1,13 @@
 import SwiftUI
 import AnalyzersKit
 
-/// What can be pushed in the System group: nothing of its own yet (a report's
-/// source is the shared raw-output screen), so this carries nothing. A case goes
-/// here when a System screen pushes one.
-struct SystemRoute: Hashable, Codable, Sendable {}
+/// What can be pushed in the System group.
+enum SystemRoute: Hashable, Codable, Sendable {
+    /// One numbered section of the report open in Reports: the report by its path
+    /// (a `ReportDocument`'s id) and the section's index. The screen reads the file
+    /// again, the same read and split the reader did, so it stands on its own.
+    case reportSection(report: String, index: Int)
+}
 
 /// Network, Login & Startup Items and Reports.
 @MainActor
@@ -38,7 +41,8 @@ enum SystemGroup {
     ///    filtered to leftovers, or with that item open in the inspector;
     ///  - `network:history|older|pick:<n>` — Network on History, on the previous snapshot, or
     ///    with the nth-largest program open;
-    ///  - `reports:pick:<n>|raw` — Reports with the nth report open, or its source pushed.
+    ///  - `reports:pick:<n>|section:<n>|raw` — Reports with the nth report open, its nth
+    ///    section pushed, or its source pushed.
     /// Pure: the screen reads the data and applies the request when it has it.
     private static func resolveDynamic(_ target: String) -> Resolution? {
         let sections: [(prefix: String, section: SectionID)] = [
@@ -60,6 +64,9 @@ enum SystemGroup {
         }
     }
 
-    /// The System group pushes no screens of its own.
-    static func destination(for route: SystemRoute) -> EmptyView { EmptyView() }
+    @ViewBuilder static func destination(for route: SystemRoute) -> some View {
+        switch route {
+        case .reportSection(let report, let index): ReportSectionScreen(report: report, index: index)
+        }
+    }
 }

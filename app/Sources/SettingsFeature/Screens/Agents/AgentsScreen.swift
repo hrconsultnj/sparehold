@@ -20,6 +20,7 @@ struct AgentsScreen: View {
                     symbol: "internaldrive.fill",
                     title: Names.Screen.onDeviceModels,
                     summary: onDeviceSummary,
+                    brand: nil,
                     isDefault: config.agent.engine == "on-device") {
                     navigator.push(.settings(.onDeviceModels))
                 }
@@ -27,6 +28,7 @@ struct AgentsScreen: View {
                     symbol: "chevron.left.forwardslash.chevron.right",
                     title: "Claude Code",
                     summary: "Your Claude subscription, through the official adapter. Sign-in happens in Claude Code, never here.",
+                    brand: EngineIconLocations.claude,
                     isDefault: config.agent.engine == "claude") {
                     navigator.push(.settings(.engineClaude))
                 }
@@ -34,6 +36,7 @@ struct AgentsScreen: View {
                     symbol: "curlybraces.square",
                     title: "Codex",
                     summary: "ChatGPT account or OpenAI API key, through the official adapter. Sign-in happens in Codex, never here.",
+                    brand: EngineIconLocations.codex,
                     isDefault: config.agent.engine == "codex") {
                     navigator.push(.settings(.engineCodex))
                 }
@@ -67,15 +70,19 @@ struct AgentsScreen: View {
         return "Download a model and Ask runs entirely on this Mac — nothing leaves, works offline."
     }
 
-    /// One row that pushes — the hub's own row shape (IconTile, summary,
-    /// chevron), plus the default-engine mark so the choice reads at a glance.
+    /// One row that pushes — the hub's own row shape (tile, summary,
+    /// chevron), plus the default-engine mark so the choice reads at a
+    /// glance. The tile is the vendor's own icon when this Mac has one, the
+    /// company's initial when it does not, or the plain symbol tile.
     private func agentRow(symbol: String, title: String, summary: String,
-                          isDefault: Bool, action: @escaping () -> Void) -> some View {
+                          brand: EngineBrand?, isDefault: Bool,
+                          action: @escaping () -> Void) -> some View {
         Button {
             action()
         } label: {
             HStack(spacing: Tokens.Space.xl) {
-                IconTile(symbol: symbol, color: .mint, side: 28).accessibilityHidden(true)
+                VendorEngineTile(brand: brand, symbol: symbol, color: .mint, side: 28)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: Tokens.Space.hair) {
                     HStack(spacing: Tokens.Space.s) {
                         Text(title)

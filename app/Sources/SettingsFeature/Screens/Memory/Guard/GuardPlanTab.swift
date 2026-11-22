@@ -35,6 +35,7 @@ struct GuardPlanTab: View {
             }
             .formStyle(.grouped)
         }
+        .helpTopic(.guardSteps, screen: Names.Screen.memoryGuard)
         .appPicker(isPresented: Binding(get: { adding != nil }, set: { if !$0 { adding = nil } }),
                    mode: adding == .neverClose ? .processFragments : .installedApps,
                    existing: adding.map(entries) ?? []) { name in

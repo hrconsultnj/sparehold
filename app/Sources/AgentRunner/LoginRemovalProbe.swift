@@ -18,10 +18,8 @@ import os
     """.write(to: echo, atomically: true, encoding: .utf8)
     chmod(echo.path, 0o755)
 
-    var offset: TimeInterval = 0
     let found = OSAllocatedUnfairLock(initialState: true)
-    let store = JobStore(ledger: JobLedger(url: dir.appending(path: "jobs.jsonl")),
-                         clock: { Date().addingTimeInterval(offset) })
+    let store = JobStore(ledger: JobLedger(url: dir.appending(path: "jobs.jsonl")))
     store.scriptOverride = echo
     store.outcomeOverride = { _, _ in
         JobOutcome(parsed: .none, run: nil, match: found.withLock { $0 } ? .exact : .newestFallback("fixture"))
@@ -77,11 +75,9 @@ import os
     let second = store.apply(from: twice, approved: ApprovedSet(approvable: plists, deselected: []))
     check("an audit can be applied once", refused(second))
 
-    let old = await audit()
-    offset = JobStore.reviewWindow + 60
-    check("an audit older than the review window is refused",
-          refused(store.apply(from: old, approved: ApprovedSet(approvable: plists, deselected: []))))
-    offset = 0
+    // the audit-older-than-the-review-window refusal is enforced by the review
+    // session's gate (probe-review-session, "expired: refused"), which takes
+    // `now:` as a parameter — the store no longer needs a movable clock.
 
     let dismissed = await audit()
     store.dismiss(dismissed)

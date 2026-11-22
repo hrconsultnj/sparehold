@@ -15,6 +15,15 @@ enum ACPVendor: Hashable, Sendable {
         }
     }
 
+    /// The vendor's identity for tiles: icon file from the vendor's own
+    /// installed app, company-name monogram as the fallback.
+    var brand: EngineBrand {
+        switch self {
+        case .claude: EngineIconLocations.claude
+        case .codex: EngineIconLocations.codex
+        }
+    }
+
     var title: String {
         switch self {
         case .claude: "Claude Code"
@@ -55,7 +64,7 @@ struct EngineDetailScreen: View {
     @State private var loaded = false
 
     var body: some View {
-        PaneScaffold(symbol: "cpu", color: .mint, title: engine.title,
+        PaneScaffold(tile: .brand(engine.brand, .mint), title: engine.title,
                      caption: engine.summary) {
             Section {
                 statusRow

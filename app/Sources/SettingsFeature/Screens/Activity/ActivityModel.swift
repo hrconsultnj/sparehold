@@ -81,12 +81,6 @@ final class ActivityModel {
 
     // MARK: - finding a row again
 
-    /// When the soonest "waiting for review" row stops being so.
-    var nextReviewExpiry: Date? {
-        rows.filter(\.needsReview).compactMap { $0.finished }
-            .map { $0.addingTimeInterval(JobStore.reviewWindow) }.min()
-    }
-
     func row(forJob id: UUID) -> ActivityRow? { rows.first { $0.jobID == id } }
 
     /// The row a route names: a log, a banner and which of the identical banners.

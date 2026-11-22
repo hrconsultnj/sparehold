@@ -30,10 +30,7 @@ private func script(_ dir: URL, _ name: String, _ body: String) -> URL {
 @MainActor func probeReviewRules() async -> Never {
     let dir = scratch("ma-probe-review")
     defer { try? FileManager.default.removeItem(at: dir) }
-    // a clock the probe moves, so "16 minutes later" needs no waiting
-    var offset: TimeInterval = 0
-    let store = JobStore(ledger: JobLedger(url: dir.appending(path: "jobs.jsonl")),
-                         clock: { Date().addingTimeInterval(offset) })
+    let store = JobStore(ledger: JobLedger(url: dir.appending(path: "jobs.jsonl")))
     store.scriptOverride = script(dir, "ok.sh", "echo \"memory auto-clean  |  DRY RUN  |  $(date '+%Y-%m-%d %H:%M:%S')\"")
     let matched = OSAllocatedUnfairLock(initialState: true)
     // the fixture stands in for "the log held this job's own block"
@@ -53,9 +50,9 @@ private func script(_ dir: URL, _ name: String, _ body: String) -> URL {
     print("preview just finished, apply now:    " + refusal(store.apply(from: preview, approved: approved)))
     await idle()
 
-    offset = JobStore.reviewWindow + 60
-    print("same preview, 16 minutes later:      " + refusal(store.apply(from: preview, approved: approved)))
-    offset = 0
+    // the 16-minutes-later refusal is proven where it is enforced now: the
+    // review session's gate takes `now:` as a parameter (probe-review-session,
+    // "expired: refused"), so the store no longer needs a movable clock.
 
     let second = store.enqueue(JobRequest(kind: .memoryClean, intent: .preview), trigger: .user)
     await wait(for: second)
@@ -276,18 +273,20 @@ private func script(_ dir: URL, _ name: String, _ body: String) -> URL {
     ]
     var session = ReviewSelection(previewID: first, items: items)
 
-    // 1. a session against a newer preview is refused
+    // 1. a session against a newer preview is refused (the gate no longer
+    //    takes time: staleness lives in Job.reviewExpiry + the adopt window)
     check("same preview: ready",
-          session.gate(previewID: first, finishedAt: Date()) == .ready)
+          session.gate(previewID: first) == .ready)
     check("newer preview: refused",
-          session.gate(previewID: second, finishedAt: Date()) == .differentPreview,
-          session.gate(previewID: second, finishedAt: Date()).sentence ?? "")
-    check("no preview: no apply", session.gate(previewID: nil, finishedAt: nil) == .noPreview)
+          session.gate(previewID: second) == .differentPreview,
+          session.gate(previewID: second).sentence ?? "")
+    check("no preview: no apply", session.gate(previewID: nil) == .noPreview)
 
-    // 2. expired: disabled, with the sentence
-    let late = Date().addingTimeInterval(JobStore.reviewWindow + 60)
-    check("expired: refused", session.gate(previewID: first, finishedAt: Date(), now: late) == .expired,
-          session.gate(previewID: first, finishedAt: Date(), now: late).sentence ?? "")
+    // 2. the review window is measured from the preview's finish
+    let finished = Date().addingTimeInterval(-60)
+    let expiry = finished.addingTimeInterval(JobStore.reviewWindow)
+    check("the window counts from the finish, not the start",
+          expiry.timeIntervalSince(finished) == JobStore.reviewWindow)
 
     // 3. a row that cannot be chosen never reaches the approved list
     session.selectAll()

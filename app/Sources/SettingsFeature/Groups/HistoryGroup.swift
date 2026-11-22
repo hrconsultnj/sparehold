@@ -4,6 +4,9 @@ import AnalyzersKit
 /// What can be pushed in the History group.
 enum HistoryRoute: Hashable, Codable, Sendable {
     case trends(TrendsRoute)
+    /// One cleanup of the Undo screen, by its run id: everything that run
+    /// moved to the Trash, with its Restore actions.
+    case cleanup(String)
 }
 
 /// Trends (and its drill-downs) and Undo.
@@ -39,6 +42,10 @@ enum HistoryGroup {
             "trends:reclaimable": drill(.reclaimableNow),
         ],
         resolveDynamic: { target in
+            // `undo:cleanup:<run id>` — one cleanup's screen (the id a row carries)
+            if target.hasPrefix("undo:cleanup:") {
+                return .main(Location(undo, path: [.history(.cleanup(String(target.dropFirst("undo:cleanup:".count))))]))
+            }
             // `trends:memory:24h`, `trends:storage:7d`: a tab with the period it should show
             for category in TrendCategory.allCases where target.hasPrefix("trends:\(category.rawValue):") {
                 let name = String(target.dropFirst("trends:\(category.rawValue):".count))
@@ -74,6 +81,7 @@ enum HistoryGroup {
     @ViewBuilder static func destination(for route: HistoryRoute) -> some View {
         switch route {
         case .trends(let route): trendsDestination(route)
+        case .cleanup(let runID): UndoCleanupScreen(runID: runID)
         }
     }
 }
