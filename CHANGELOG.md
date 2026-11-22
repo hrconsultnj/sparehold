@@ -8,9 +8,9 @@ bullet as a feature of its own, so every bullet ends with a short tag that
 GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
-## Next
+## v3.5.0 — Everything You See, You Can Act On
 
-Working on development right now — beta builds carry these as they land:
+This release turns looking into doing. A finished preview is a live review you can act from, the Undo screen agrees with the real Trash, Time Machine deletes snapshots by age, the sidebar reads by intent, and the lessons explain themselves with your Mac's own numbers.
 
 - The menu-bar panel never installs anything itself: an available update is a star that opens Updates, and the version sits beside it as plain text. <!-- wn: open=update icon=star.fill title="Updates Stay on the Updates Screen" -->
 - The Disk screen explains in the app's own voice why cleaned space can stay invisible — Time Machine's local snapshots hold it — with a shortcut to thin them now. <!-- wn: open=ask icon=sparkles title="Why Freed Space Lags Behind" -->
