@@ -460,7 +460,7 @@ turbo_busy() {
 }
 # pass 1: every cache entry everywhere, newest of each repo first
 TURBO_ENTRIES="$(mktemp -t turbo-entries)"   # repo<TAB>entry<TAB>kb
-turbo_total_kb=0; turbo_repos=0; turbo_last_repo=""
+turbo_total_kb=0; turbo_repos=0
 for root in $ROOTS; do
   [[ -d "$root" ]] || continue
   while IFS= read -r cdir; do
