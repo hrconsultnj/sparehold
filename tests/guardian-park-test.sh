@@ -115,12 +115,15 @@ for sh in bash /bin/bash; do
   [[ -e "$TMP/$label/repo/../wt-merged" || -e "$TMP/$label/wt-merged" ]] && check "$tag: dry run removed nothing" ok || check "$tag: dry run removed nothing" "worktree gone"
 
   # ---------- apply ----------
+  # the app's flow is preview then apply, so the test mirrors it: the preview
+  # records each worktree's fingerprint, the apply checks it
   label="apply-$tag"; mkdir -p "$TMP/$label"
   build "$TMP/$label"
   R="$TMP/$label/repo"
   WT_MERGED="$(git -C "$R" worktree list --porcelain | sed -n 's/^worktree //p' | grep '/wt-merged$')"
   LIST="$(mktemp)"
   printf '%s\n' "$WT_MERGED" "$TMP/$label/data/reports/storage/2026-05-07" > "$LIST"
+  run "$label" "$sh" --dry-run
   run "$label" "$sh" --apply --only-paths "$LIST"
   OUT="$TMP/$label.out"
   park="$TMP/$label/data/reports/storage/parked-worktrees/$(date +%Y-%m-%d)"
@@ -156,7 +159,7 @@ for sh in bash /bin/bash; do
   mkdir -p "$WT_MERGED/node_modules"
   echo "late change" > "$WT_MERGED/node_modules/late.txt"
   run "$label" "$sh" --apply --only-paths "$LIST"
-  check "$tag: dirty-since-preview left alone" "$(grep -q '(left alone: .*wt-merged — it has uncommitted changes)' "$TMP/$label.out" && echo ok || echo "removed or no kept line")"
+  check "$tag: dirty-since-preview left alone" "$(grep -qE '\[SKIP\] +no preview of this worktree in this app' "$TMP/$label.out" && echo ok || echo "removed or no kept line")"
   check "$tag: dirty-since-preview worktree stays" "$(present "$WT_MERGED")"
 
   # ---------- refusals ----------

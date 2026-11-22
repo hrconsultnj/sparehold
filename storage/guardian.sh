@@ -16,8 +16,8 @@
 #     branch is an ancestor of the repo's main/integration branch. Its
 #     uncommitted work — if any appears between the preview and the apply —
 #     is re-checked and the worktree is left alone: the Guardian never parks
-#     tracked changes, because a dirty worktree's changes belong to unmerged
-#     work, which is out of scope by definition. (No refs/parked pin is ever
+#     a tree that changed since its review (tracked or ignored), because a
+#     changed tree is not the one the person reviewed. (No refs/parked pin is ever
 #     created here, so the ledger's "Parked changes" column stays empty for
 #     Guardian rows; the column is the older deep clean's.)
 #   * Local-only files that remain in a clean worktree (gitignored .env
@@ -154,7 +154,8 @@ if [[ -e "$LOCK_FILE" ]]; then
 fi
 echo "$$" > "$LOCK_FILE"
 REPOS_FILE="$(mktemp -t guardian-repos)"
-WT_CANDIDATES="$(mktemp -t guardian-wt)"   # worktree<TAB>repo<TAB>branch<TAB>base<TAB>sha<TAB>kb<TAB>depn<TAB>depKB
+WT_CANDIDATES="$(mktemp -t guardian-wt)"
+SEEN_FILE="$REPORTS_ROOT/storage/guardian-seen.tsv"   # worktree<TAB>seen-sha: the preview's fingerprint of the tree's whole visible state   # worktree<TAB>repo<TAB>branch<TAB>base<TAB>sha<TAB>kb<TAB>depn<TAB>depKB<TAB>seen-sha
 LIVE_CWDS_FILE=""
 cleanup_tmp() {
   rm -f "$LOCK_FILE" ${RUNTIME_ROOTS_FILE:+"$RUNTIME_ROOTS_FILE"} \
@@ -419,7 +420,18 @@ wt_consider() {
     done <<< "$deps"
   fi
   kb="$(du -sk "$wt" 2>/dev/null | awk '{print $1}')"; kb="${kb:-0}"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$wt" "$repo" "${br:-detached ${sha:0:10}}" "$base" "$sha" "$kb" "$depn" "$depkb" >> "$WT_CANDIDATES"
+  # fingerprint the whole visible state (tracked + ignored): the apply re-computes
+  # it and leaves the worktree alone when anything changed since this preview —
+  # the review described the tree as it stood, not whatever it became
+  seen="$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null | shasum | awk '{print $1}')"
+  # only a preview records the fingerprint: an apply that re-swept first would
+  # compare a tree against itself, and the person never reviewed what this run
+  # just looked at — the reviewed list is what counts
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    mkdir -p "$(dirname "$SEEN_FILE")"
+    printf '%s\t%s\n' "$wt" "$seen" >> "$SEEN_FILE"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$wt" "$repo" "${br:-detached ${sha:0:10}}" "$base" "$sha" "$kb" "$depn" "$depkb" "$seen" >> "$WT_CANDIDATES"
   WT_OFFERED=$((WT_OFFERED + 1))
   # a preview identifies; only the apply's deletions count as freed
   [[ "$DRY_RUN" -eq 1 ]] && TOTAL_KB=$((TOTAL_KB + kb))
@@ -608,7 +620,7 @@ done
 # ---------- apply: park + remove, per reviewed candidate ----------
 # The order per candidate, every time (the park flow):
 #   late looks (runtime root fresh, live session) -> re-check the tree is
-#   still clean -> ditto local-only files aside -> append the ledger row
+#   still exactly what the review saw -> ditto local-only files aside -> append the ledger row
 #   BEFORE the remove (the receipt can never be lost) -> git worktree remove.
 # The branch is never deleted; a failure leaves everything as it was.
 wt_apply() {  # <worktree<TAB>repo<TAB>branch<TAB>base<TAB>sha<TAB>kb<TAB>depn<TAB>depKB>
@@ -620,8 +632,21 @@ wt_apply() {  # <worktree<TAB>repo<TAB>branch<TAB>base<TAB>sha<TAB>kb<TAB>depn<T
   base="$(printf '%s' "$row" | awk -F'\t' '{print $4}')"
   sha="$(printf '%s' "$row" | awk -F'\t' '{print $5}')"
   kb="$(printf '%s' "$row" | awk -F'\t' '{print $6}')"
-  local name park="" park_rel precious rel restore ref parked_note
+  local name park="" park_rel precious rel restore ref parked_note seen
   name="${wt##*/}"
+  # re-check against the PREVIEW's fingerprint, never a fresh one: the preview
+  # recorded the tree's whole visible state (tracked + ignored); anything that
+  # changed since — a tracked edit, a build cache that grew, a new file — means
+  # this is not the tree the person reviewed, so it is left alone for a fresh
+  # preview. No record means no preview in this app offered it: never removed.
+  seen="$(awk -F'\t' -v w="$wt" '$1 == w { print $2 }' "$SEEN_FILE" 2>/dev/null | tail -1)"
+  if [[ -z "$seen" ]]; then
+    log "  [SKIP]    no preview of this worktree in this app  $wt"; return 0
+  fi
+  if [[ "$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null | shasum | awk '{print $1}')" != "$seen" ]]; then
+    log "  (left alone: ${wt} — it changed since the preview)"
+    return 0
+  fi
   if ! approved "$wt"; then log "  [SKIP]    not in approved set  $wt"; return 0; fi
   if protected "$wt"; then log "  [SKIP]    on the protect list  $wt"; return 0; fi
   # the late look: a session may have started in it since the run began
@@ -630,12 +655,6 @@ wt_apply() {  # <worktree<TAB>repo<TAB>branch<TAB>base<TAB>sha<TAB>kb<TAB>depn<T
   fi
   if live_session_in "$wt"; then
     log "  [SKIP]    a live session is sitting in it  $wt"; return 0
-  fi
-  # re-check clean: the review ticked a clean tree; a tree that grew changes
-  # since is left alone — the Guardian never parks tracked changes
-  if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null | head -1)" ]]; then
-    log "  (left alone: ${wt} — it has uncommitted changes)"
-    return 0
   fi
   [[ -d "$wt" ]] || { log "  [SKIP]    already gone  $wt"; return 0; }
   # 1. copy local-only files aside (gitignored, not rebuildable by name)
