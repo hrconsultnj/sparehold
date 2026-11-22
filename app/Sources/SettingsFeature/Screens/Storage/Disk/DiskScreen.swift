@@ -1,6 +1,7 @@
 import AnalyzersKit
 import SwiftUI
 import AppKit
+import UIComponents
 
 /// Disk: where the space is and what each cleanup could give back, with the way into each
 /// cleanup. Capacity and runway on top, one row per storage task (how much its last preview
