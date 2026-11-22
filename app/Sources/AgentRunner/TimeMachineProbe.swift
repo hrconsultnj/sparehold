@@ -62,7 +62,8 @@ import Foundation
     let review = TimeMachineReview.build(lines: preview.lines, now: now)
     expect(review.deletable == 2, "two local snapshots can be deleted, got \(review.deletable)")
     expect(review.rows.rows.filter { !$0.isChoosable }.map(\.group) == [Names.Temp.managedByMacOS], "macOS's own snapshot is kept apart: \(review.rows.rows.map { "\($0.group ?? "-"):\($0.title)" })")
-    expect(Set(review.rows.rows.filter(\.isChoosable).compactMap(\.group)).contains("Today") && review.rows.rows.filter(\.isChoosable).count == 2, "snapshots are grouped by day, today first: \(review.rows.rows.compactMap(\.group))")
+    // the IA regroup: snapshots group by age band, not by day
+    expect(Set(review.rows.rows.filter(\.isChoosable).compactMap(\.group)).contains(Names.Band.under7) && review.rows.rows.filter(\.isChoosable).count == 2, "snapshots are grouped by age band: \(review.rows.rows.compactMap(\.group))")
     expect(review.freeBefore == "51Gi", "free space before is read: \(review.freeBefore ?? "nil")")
     if let banner, case .block(let block) = WholeRun.find(banner: banner, in: log) {
         expect(TimeMachineReview.build(lines: block.lines, now: now).deletable == 2, "the block found in the log by its banner gives the same snapshots")
