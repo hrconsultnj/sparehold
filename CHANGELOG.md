@@ -10,6 +10,13 @@ Older entries below keep the name the app had when they shipped.
 
 ## Next
 
+Working on development right now — beta builds carry these as they land:
+
+- The menu-bar panel never installs anything itself: an available update is a star that opens Updates, and the version sits beside it as plain text. <!-- wn: open=update icon=star.fill title="Updates Stay on the Updates Screen" -->
+- The Disk screen explains in the app's own voice why cleaned space can stay invisible — Time Machine's local snapshots hold it — with a shortcut to thin them now. <!-- wn: open=ask icon=sparkles title="Why Freed Space Lags Behind" -->
+- The Guardian's worktree cleanup checks each tree against the fingerprint its preview recorded: anything that changed since the review — tracked or ignored — is left alone for a fresh preview, and an apply with no preview in this app removes nothing. <!-- wn: open=- icon=wrench title="Reviewed Trees Only" -->
+- When a Codex session refuses a pinned model, the failure now carries the fix: update the CLI, and the model follows the subscription. <!-- wn: open=- icon=wrench title="Codex Model Pin Fixed" -->
+
 ## v3.4.0 — The Machinery Speaks in Its Own Voice
 <!-- wn: released=2026-11-21 -->
 
