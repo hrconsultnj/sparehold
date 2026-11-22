@@ -20,6 +20,9 @@ struct AgeBandSummary: View {
     var noun = "items"
     /// One sentence under the bands; nil is none.
     var note: String?
+    /// An optional per-band action: the button's title for that band, and the
+    /// band to run it on. nil keeps every band read-only.
+    var onBandAction: ((AgeBand) -> (title: String, act: () -> Void))? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,7 +42,10 @@ struct AgeBandSummary: View {
             Text(band.title)
             Spacer()
             Text(detail(band)).monospacedDigit().foregroundStyle(.secondary)
-            if !selectable.isEmpty {
+            if let action = onBandAction?(band) {
+                Button(action.title) { action.act() }
+                    .controlSize(.small)
+            } else if !selectable.isEmpty {
                 Button("Select") { session?.setTicked(selectable, true) }
                     .controlSize(.small)
                     .help("Tick this band's rows; Apply still shows the exact list before anything moves")

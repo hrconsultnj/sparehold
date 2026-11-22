@@ -113,12 +113,12 @@ import Foundation
     expect(templateHead == "__UID__" && (active.first ?? "").replacingOccurrences(of: "__UID__", with: "#\(uid)") == TimeMachinePermission.ruleLine(uid: uid),
            "the template's first field is the __UID__ placeholder, and with the user ID put in it the template IS the app's line: \(active)")
     expect(!template.contains("__USERNAME__"), "the template has no account-name placeholder left")
-    expect(active.count == 1 && templateTail == TimeMachinePermission.ruleTail, "the repository's template says, after its first field, the app's constant word for word: \(active)")
+    expect(active.count >= 1 && templateTail == TimeMachinePermission.ruleTail, "the repository's template says, after its first field, the app's constant word for word: \(active)")
     expect(!(active.first ?? "").contains("*"), "the rule has no wildcard: the arguments must match exactly")
     for name in ["tm-reclaim.sh", "storage-auto-clean.sh"] {
         let text = (try? String(contentsOf: repo.appending(path: "storage/\(name)"), encoding: .utf8)) ?? ""
         let uses = text.components(separatedBy: "\n").filter { $0.contains("/usr/bin/tmutil thinlocalsnapshots") && !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
-        expect(!uses.isEmpty && uses.allSatisfy { $0.contains(TimeMachinePermission.thinCommand) }, "\(name) runs exactly the allowed command line: \(uses)")
+        expect(!uses.isEmpty && uses.allSatisfy { $0.contains(TimeMachinePermission.thinCommand) || $0.contains(TimeMachinePermission.deleteCommand) }, "\(name) runs exactly the allowed command lines: \(uses)")
     }
 
     // ---- the environment the root shell starts with (H1) ----
@@ -191,7 +191,7 @@ import Foundation
     let shellEnvironment = installProcess.environment ?? ProcessInfo.processInfo.environment
     let status = runSimulated(rootCommand, environment: shellEnvironment)
     let installed = (try? String(contentsOf: etc.appending(path: "tmutil-thin-\(uid)"), encoding: .utf8)) ?? ""
-    expect(status == 0 && installed == "\(TimeMachinePermission.ruleLine(uid: uid))\n", "with the app's environment the install writes the app's own line and nothing else: \(installed.debugDescription)")
+    expect(status == 0 && installed == "\(TimeMachinePermission.ruleLine(uid: uid))\n\(TimeMachinePermission.deleteRuleLine(uid: uid))\n", "with the app's environment the install writes the app's own two lines and nothing else: \(installed.debugDescription)")
     expect(!fm.fileExists(atPath: marker.path), "an exported umask function, SHELLOPTS with PS4, BASH_ENV, ENV, IFS, CDPATH and a PATH of fakes reach nothing, and none of the clone's fake programs run")
     let logged = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
     expect(logged.contains("visudo -cf") && logged.contains("visudo -c\n") && logged.contains("install -S -m 0440 -o root -g wheel"), "visudo checked the file, installed it with -S, then checked the live configuration")

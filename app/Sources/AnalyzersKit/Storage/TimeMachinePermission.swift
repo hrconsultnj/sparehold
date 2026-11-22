@@ -24,6 +24,9 @@ public enum TimeMachinePermission {
     /// The command the rule allows, and the one the engine runs. The template in the repository and the scripts say
     /// the same (a probe fails when they differ).
     public static let thinCommand = "/usr/bin/tmutil thinlocalsnapshots / 999999999999 4"
+    /// The second allowed command: deleting local snapshots OLDER than a date, one call per snapshot, so the
+    /// Time Machine screen can act on an age band. The date is a wildcard in the rule — the only part that varies.
+    public static let deleteCommand = "/usr/bin/tmutil deletelocalsnapshots / *"
 
     /// Everything in the rule after the first field (who). The repository's template carries the same text after its
     /// own first field, and a probe fails when they differ.
@@ -34,6 +37,9 @@ public enum TimeMachinePermission {
     /// shape, so no quote, space, `%`, `,` or sudoers keyword can ever be in it (the manual: "user-IDs (prefixed
     /// with '#')", and a `#` followed by a user ID is not a comment).
     public static func ruleLine(uid: UInt32) -> String { "#\(uid) \(ruleTail)" }
+
+    /// The rule's second line, for the per-band deletion above.
+    public static func deleteRuleLine(uid: UInt32) -> String { "#\(uid) ALL=(root) NOPASSWD: \(deleteCommand)" }
 
     /// The environment every program of this path is started with: a PATH of system folders and nothing else. The
     /// app's own environment can be set by any program on the account (`launchctl setenv`), and a shell that
@@ -54,7 +60,7 @@ public enum TimeMachinePermission {
     public static func installRootCommand(uid: UInt32) -> String? {
         guard uid != 0 else { return nil }
         let file = ruleFile(uid: uid)
-        let chain = "umask 077 && /bin/rm -f \(scratch) && /usr/bin/printf '%s\\n' '\(ruleLine(uid: uid))' > \(scratch)"
+        let chain = "umask 077 && /bin/rm -f \(scratch) && /usr/bin/printf '%s\\n%s\\n' '\(ruleLine(uid: uid))' '\(deleteRuleLine(uid: uid))' > \(scratch)"
             + " && /usr/sbin/visudo -cf \(scratch)"
             + " && /usr/bin/install -S -m 0440 -o root -g wheel \(scratch) \(file)"
             + " && /bin/rm -f \(scratch)"
@@ -153,7 +159,7 @@ public enum TimeMachinePermission {
                 }
                 let denied = command.hasPrefix("!")
                 if denied { command = String(command.dropFirst()).trimmingCharacters(in: .whitespaces) }
-                guard forRoot, command == "ALL" || command == thinCommand || command == "/usr/bin/tmutil" else { continue }
+                guard forRoot, command == "ALL" || command == thinCommand || command == deleteCommand || command == "/usr/bin/tmutil" else { continue }
                 decided = true
                 passwordless = !denied && tagPasswordless
             }

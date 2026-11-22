@@ -240,8 +240,12 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .spotlight:
             return ["--apply"]
         case .tmReclaim:
-            // looks first (`--dry-run`, the default) and acts only with `--apply`; no list: there is one thing to do
-            return ["--apply"] + (options.startBackup ? [] : ["--no-backup"])
+            // looks first (`--dry-run`, the default) and acts only with `--apply`; no list: there is one thing to do.
+            // `--older-than N` deletes only snapshots older than N days (the per-band action); without it the
+            // thin command runs as the permission allows — every local snapshot at once.
+            var tmArgs = ["--apply"] + (options.startBackup ? [] : ["--no-backup"])
+            if let older = options.tmOlderThan { tmArgs += ["--older-than", String(older)] }
+            return tmArgs
         case .unusedApps:
             return ["--stale-apps", "--execute", "--yes"] + approval
         case .recordings:

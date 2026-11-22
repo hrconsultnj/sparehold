@@ -44,6 +44,18 @@ public enum AgeBand: Int, CaseIterable, Identifiable, Comparable, Sendable {
 
     public static func < (lhs: AgeBand, rhs: AgeBand) -> Bool { lhs.rawValue < rhs.rawValue }
 
+    /// The band's OLDEST boundary in days (under7 → 7): "delete older than this"
+    /// deletes exactly what is in the band, without touching newer snapshots.
+    public var olderThanDays: Int? {
+        switch self {
+        case .under7: 7
+        case .days7to30: 30
+        case .days30to90: 90
+        case .over90: nil   // no boundary above: "older than 90" deletes them all
+        case .unknown: nil
+        }
+    }
+
     public init(days: Int?) {
         guard let days else { self = .unknown; return }
         switch days {

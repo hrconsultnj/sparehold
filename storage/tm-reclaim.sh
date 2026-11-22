@@ -12,6 +12,8 @@
 #
 #   ./tm-reclaim.sh --dry-run    # (the default) list snapshots + show df, change nothing
 #   ./tm-reclaim.sh --apply      # thin local snapshots, start a backup
+#   --apply --older-than <days>   # delete local snapshots OLDER than <days> only (needs the
+#                                 #   deletelocalsnapshots rule; macOS dates come from the snapshots)
 #   ./tm-reclaim.sh --apply --wait       # same, but block until the backup finishes
 #   ./tm-reclaim.sh --apply --no-backup  # reclaim space only, skip the backup
 #
@@ -45,6 +47,9 @@ while [[ $# -gt 0 ]]; do
     --apply)     DRY_RUN=0 ;;
     --no-backup) DO_BACKUP=0 ;;
     --wait)      WAIT_BACKUP=1 ;;
+    --older-than)
+      DRY_RUN=0; DO_BACKUP=0; OLDER_THAN="${2:-}"; shift ;;
+
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
   shift
@@ -91,6 +96,26 @@ fi
 # ---------- 2. thin (the whitelisted command — releases purgeable space) ----------
 STATUS=0
 log "Thinning local snapshots…"
+if [[ -n "${OLDER_THAN:-}" ]]; then
+  # per-range deletion: every local snapshot OLDER than N days, by its own date.
+  # The sudoers rule allows `deletelocalsnapshots / <date>` for any date, so
+  # each deletion is one passwordless call; the cutoff keeps snapshots newer
+  # than the range. macOS's own snapshots are never named here.
+  cutoff="$(date -v-"$OLDER_THAN"d '+%Y-%m-%d')"
+  removed=0
+  while IFS= read -r snap; do
+    snap_date="${snap#com.apple.TimeMachine.}"
+    snap_date="${snap_date%.local}"
+    [[ "$snap_date" < "$cutoff" ]] || continue
+    if sudo -n /usr/bin/tmutil deletelocalsnapshots / "$snap_date" >/dev/null 2>&1; then
+      log "  deleted local snapshot $snap_date (older than $OLDER_THAN days)"
+      removed=$((removed + 1))
+    else
+      log "  [FAILED] could not delete local snapshot $snap_date — the sudoers rule for deletelocalsnapshots is missing (Time Machine > Allow…)"
+    fi
+  done < <(tmutil listlocalsnapshots / 2>/dev/null | grep '^com.apple.TimeMachine.')
+  [[ "$removed" -eq 0 ]] && log "  (no local snapshots older than $OLDER_THAN days)"
+else
 if sudo -n /usr/bin/tmutil thinlocalsnapshots / 999999999999 4 >/dev/null 2>&1; then
   log "  done (passwordless via sudoers rule)."
 elif [[ -t 0 ]]; then
@@ -101,6 +126,7 @@ else
   log "  ✗ needs permission: no sudoers rule and no terminal, so nothing could be thinned. Allow thinning once (the app's Allow… button, or ./storage-manage-agents.sh sudoers-install)."
   STATUS=3
 fi
+fi   # --older-than branch (per-range deletion)
 
 # ---------- 3. delete any TM snapshots that survived thinning (terminal only) ----------
 REMAINING=$(tmutil listlocalsnapshots / 2>/dev/null | grep 'com.apple.TimeMachine' || true)

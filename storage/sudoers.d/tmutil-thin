@@ -4,8 +4,10 @@
 #   - delete backups on the Time Machine disk   (tmutil delete and the other verbs are not allowed)
 #   - turn Time Machine off                     (tmutil disable is not allowed)
 #   - run any other program or any other tmutil command line
-# It does let any program running as that account delete the local snapshots without asking. Local snapshots can be
-# the only copies of recent changes while the backup disk is not connected, and cannot be brought back.
+# It lets any program running as that account delete the local snapshots without asking: thinning (the first line)
+# and, on the second line, deleting snapshots OLDER than a date the caller names — the Time Machine screen's age
+# bands. Local snapshots can be the only copies of recent changes while the backup disk is not connected, and cannot
+# be brought back.
 #
 # __UID__ becomes "#<the account's numeric user ID>" when installed: a user ID, never a name, so no account name is
 # written into a file root reads. Each account has its own file, /etc/sudoers.d/tmutil-thin-<user ID>.
@@ -14,3 +16,4 @@
 #           yourself:  ./storage/storage-manage-agents.sh sudoers-install   (validates with visudo first)
 # Remove:   Time Machine > Options > Remove Permission…, or  ./storage/storage-manage-agents.sh sudoers-uninstall
 __UID__ ALL=(root) NOPASSWD: /usr/bin/tmutil thinlocalsnapshots / 999999999999 4
+__UID__ ALL=(root) NOPASSWD: /usr/bin/tmutil deletelocalsnapshots / *
