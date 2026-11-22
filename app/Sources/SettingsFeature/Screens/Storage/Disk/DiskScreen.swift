@@ -1,5 +1,6 @@
 import AnalyzersKit
 import SwiftUI
+import AppKit
 
 /// Disk: where the space is and what each cleanup could give back, with the way into each
 /// cleanup. Capacity and runway on top, one row per storage task (how much its last preview
@@ -111,6 +112,29 @@ struct DiskScreen: View {
             Text(reclaimable > 0 ? "Cleanups · \(ByteSize.format(reclaimable)) Could Be Freed" : "Cleanups")
         } footer: {
             Text("Each figure is from that cleanup's last preview, not from the disk right now.")
+            HStack(alignment: .top, spacing: Tokens.Space.m) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Tokens.Space.hair) {
+                    Text("Cleaned space can stay invisible until Time Machine's local snapshots thin.")
+                        .font(.callout)
+                    Text("The Deep Clean thins them (it already runs with that permission). After a cleanup, thin from Time Machine to see the freed space in Finder.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: Tokens.Space.m)
+                Button("Time Machine") {
+                    navigator.open(target: "timeMachine")
+                }
+                .controlSize(.small)
+                .help("Open Time Machine to thin local snapshots now")
+            }
+            .padding(Tokens.Space.s)
+            .background(Tokens.Surface.tile, in: RoundedRectangle(cornerRadius: Tokens.Radius.tile))
+
         }
     }
 

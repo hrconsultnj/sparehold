@@ -34,10 +34,9 @@ extension MenuContentView {
             .help("Open Settings")
             // the version is always text; an available update is a star that
             // opens Updates — the panel never installs anything itself
-            Text(updates.build.shortVersionText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(updates.build.versionText)        // the full version, build metadata included
+            Spacer()
+            // the update star lives with the icon cluster (beside Settings),
+            // not before the version, where it read as out of place
             if updates.offersInstall {
                 Button {
                     SettingsOpener.open(target: "update")
@@ -47,7 +46,10 @@ extension MenuContentView {
                 }
                 .help("An update is available — open Updates to install it")
             }
-            Spacer()
+            Text(updates.build.shortVersionText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(updates.build.versionText)        // the full version, build metadata included
             Button {
                 GuardControl.restartApp()
             } label: {
