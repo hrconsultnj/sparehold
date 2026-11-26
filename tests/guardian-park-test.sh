@@ -166,6 +166,53 @@ for sh in bash /bin/bash; do
   run "$label" "$sh" --apply
   check "$tag: bare --apply refused" "$([[ $? -ne 0 ]] && echo ok || echo accepted)"
   grep -q "needs a reviewed --only-paths list" "$TMP/$label.out" && check "$tag: bare --apply explains itself" ok || check "$tag: bare --apply explains itself" "no sentence"
+
+  # ---------- ephemeral main, detached HEAD, and nested monorepo deps ----------
+  label="ephemeral-$tag"; mkdir -p "$TMP/$label/origin.git" "$TMP/$label/repo" "$TMP/$label/data/reports/storage" "$TMP/$label/home"
+  git -C "$TMP/$label/origin.git" init -q --bare -b main
+  ER="$TMP/$label/repo"
+  git -C "$ER" init -q -b main
+  printf 'node_modules/\n' > "$ER/.gitignore"
+  echo base > "$ER/a.txt"
+  git -C "$ER" add -A; git -C "$ER" commit -qm init
+  git -C "$ER" remote add origin "$TMP/$label/origin.git"
+  git -C "$ER" push -q -u origin main
+  git -C "$ER" checkout -q -b development
+  echo dev > "$ER/dev.txt"; git -C "$ER" add -A; git -C "$ER" commit -qm "dev commit"
+  git -C "$ER" worktree add -q "$ER/.composure/workspaces/main" main
+  git -C "$ER" worktree add -q --detach "$ER/.composure/workspaces/deploy-1234" development
+  mkdir -p "$ER/.composure/workspaces/deploy-1234/packages/app/node_modules/pkg"
+  echo m > "$ER/.composure/workspaces/deploy-1234/packages/app/node_modules/pkg/i.js"
+  old "$TMP/$label"
+  run "$label" "$sh"
+  EOUT="$TMP/$label.out"
+  WT_MAIN_EPH="$(git -C "$ER" worktree list --porcelain | sed -n 's/^worktree //p' | grep '/workspaces/main$')"
+  WT_DET_EPH="$(git -C "$ER" worktree list --porcelain | sed -n 's/^worktree //p' | grep '/deploy-1234$')"
+  grep -q "worktree  ${WT_MAIN_EPH}" "$EOUT" && check "$tag: synced idle main worktree offered" ok || check "$tag: synced idle main worktree offered" "missing in $EOUT"
+  grep -q "worktree  ${WT_DET_EPH}.*1 dep dirs" "$EOUT" && check "$tag: detached HEAD + nested dep dir offered" ok || check "$tag: detached HEAD + nested dep dir offered" "missing in $EOUT"
+
+  ELIST="$(mktemp)"; printf '%s\n' "$WT_MAIN_EPH" "$WT_DET_EPH" > "$ELIST"
+  run "$label" "$sh" --apply --only-paths "$ELIST"
+  check "$tag: synced main worktree removed on apply" "$(absent "$WT_MAIN_EPH")"
+  check "$tag: detached worktree removed on apply" "$(absent "$WT_DET_EPH")"
+  check "$tag: nested node_modules NOT parked" "$(absent "$TMP/$label/data/reports/storage/parked-worktrees/$(date +%Y-%m-%d)")"
+
+  # Ahead-of-origin main worktree must be kept
+  label="ahead-$tag"; mkdir -p "$TMP/$label/origin.git" "$TMP/$label/repo" "$TMP/$label/data/reports/storage" "$TMP/$label/home"
+  git -C "$TMP/$label/origin.git" init -q --bare -b main
+  AR="$TMP/$label/repo"
+  git -C "$AR" init -q -b main
+  echo base > "$AR/a.txt"; git -C "$AR" add -A; git -C "$AR" commit -qm init
+  git -C "$AR" remote add origin "$TMP/$label/origin.git"
+  git -C "$AR" push -q -u origin main
+  git -C "$AR" checkout -q -b development
+  git -C "$AR" worktree add -q "$AR/.composure/workspaces/main" main
+  echo unpushed > "$AR/.composure/workspaces/main/ahead.txt"
+  git -C "$AR/.composure/workspaces/main" add -A; git -C "$AR/.composure/workspaces/main" commit -qm ahead
+  old "$TMP/$label"
+  run "$label" "$sh"
+  grep -q "kept: .*workspaces/main — its branch main is not merged into origin/main" "$TMP/$label.out" \
+    && check "$tag: ahead-of-origin main worktree kept" ok || check "$tag: ahead-of-origin main worktree kept" "not kept"
 done
 
 # ---------- bash 3.2 is what ran ----------

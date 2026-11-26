@@ -10,10 +10,13 @@
 # schedule.
 #
 #   * A worktree is offered only when ALL of these hold: it is a linked
-#     worktree (a .git FILE, never a primary checkout), not named main, not
-#     locked, not prunable, idle N days, a clean tree, not a runtime root,
-#     no live coding session sitting in it, not on the protect list, and its
-#     branch is an ancestor of the repo's main/integration branch. Its
+#     worktree (a .git FILE, never a primary checkout), not a non-main branch
+#     inside a folder named main, not locked, not prunable, idle N days, a
+#     clean tree, not a runtime root, no live coding session sitting in it, not
+#     on the protect list, and its branch/SHA is merged into the repo's
+#     main/integration branch — or, for the `main` release worktree itself,
+#     `origin/main` exists, `HEAD == origin/main`, and no pending package
+#     publish marker exists. Its
 #     uncommitted work — if any appears between the preview and the apply —
 #     is re-checked and the worktree is left alone: the Guardian never parks
 #     a tree that changed since its review (tracked or ignored), because a
@@ -329,9 +332,11 @@ base_branch() {  # <repo>
 
 # Dependency dirs of a worktree (rebuildable output by name), one per line.
 wt_dep_dirs() {  # <worktree>
-  find "$1" -maxdepth 1 -type d \
-    \( -name node_modules -o -name target -o -name DerivedData -o -name .build -o -name .swiftpm \
-       -o -name Pods -o -name .gradle -o -name .expo \) -print 2>/dev/null
+  find "$1" -maxdepth 4 -mindepth 1 \
+    \( -type d \( -name .git -o -name .composure -o -name .claude \) -prune \) -o \
+    \( -type d \( -name node_modules -o -name target -o -name DerivedData -o -name .build -o -name .swiftpm \
+       -o -name Pods -o -name .gradle -o -name .expo -o -name .next -o -name dist -o -name build -o -name .turbo \) \
+       -prune -print \) 2>/dev/null
 }
 
 # Local-only files of a clean worktree: gitignored paths whose NAME is not
@@ -342,7 +347,7 @@ wt_local_only() {  # <worktree>
     | while IFS= read -r p; do
         p="${p%/}"
         [[ -n "$p" ]] || continue
-        case "$p" in node_modules|target|DerivedData|.build|.swiftpm|Pods|.gradle|.expo) continue ;; esac
+        case "${p##*/}" in node_modules|target|DerivedData|.build|.swiftpm|Pods|.gradle|.expo|.next|dist|build|.turbo) continue ;; esac
         [[ -e "$1/$p" ]] && printf '%s\n' "$p"
       done
 }
@@ -377,7 +382,7 @@ wt_keep() {  # <worktree> <reason>
 # wt_consider <repo> <worktree> <head-sha> <branch|""> <locked 0|1> <prunable 0|1>
 wt_consider() {
   local repo="$1" wt="$2" sha="$3" br="$4" locked="$5" stale="$6"
-  local name base kb depn=0 depkb=0 deps d depkb_one depnote
+  local name base kb depn=0 depkb=0 deps d depkb_one depnote orig_main cdir merged_into alt
   [[ -d "$wt" ]] || return 0
   # linked worktrees carry a .git FILE; a .git directory is a primary checkout
   [[ -f "$wt/.git" ]] || return 0
@@ -387,8 +392,20 @@ wt_consider() {
     return 0
   fi
   name="${wt##*/}"
-  # main is never a candidate — the branch, or a worktree folder named main
-  if [[ "$br" == "main" || "$name" == "main" ]]; then WT_MAIN=$((WT_MAIN + 1)); return 0; fi
+  # A folder named main holding a non-main branch stays excluded.
+  if [[ "$name" == "main" && "$br" != "main" ]]; then WT_MAIN=$((WT_MAIN + 1)); return 0; fi
+  orig_main=""
+  if [[ "$br" == "main" ]]; then
+    orig_main="$(git -C "$repo" rev-parse --verify -q refs/remotes/origin/main 2>/dev/null || true)"
+    # No origin/main (local-only repo) -> keep main as a standing skip.
+    if [[ -z "$orig_main" ]]; then WT_MAIN=$((WT_MAIN + 1)); return 0; fi
+    cdir="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [[ -n "$cdir" && "$cdir" != /* ]]; then cdir="$repo/$cdir"; fi
+    if [[ -n "$cdir" && -e "$cdir/composure-pending-npm-publish" ]]; then
+      wt_keep "$wt" "a package publish is pending from main"
+      return 0
+    fi
+  fi
   [[ "$locked" == "1" ]] && { wt_keep "$wt" "it is locked"; return 0; }
   protected "$wt" && { wt_keep "$wt" "it is on your protect list"; return 0; }
   # something live runs from it: never a candidate, never even a kept row
@@ -404,11 +421,33 @@ wt_consider() {
   fi
   # no live coding session sits in it
   live_session_in "$wt" && { wt_keep "$wt" "a live session is sitting in it"; return 0; }
-  # the merge test: HEAD is an ancestor of the integration branch
-  base="$(base_branch "$repo")"
-  if ! git -C "$repo" merge-base --is-ancestor "$sha" "$base" 2>/dev/null; then
-    wt_keep "$wt" "its branch ${br:-at ${sha:0:10}} is not merged into ${base}"
-    return 0
+  # the merge / sync test: main compares against origin/main; feature and
+  # detached-HEAD worktrees compare against base_branch or integration branches
+  if [[ "$br" == "main" ]]; then
+    base="origin/main"
+    if [[ "$sha" != "$orig_main" ]]; then
+      wt_keep "$wt" "its branch main is not merged into ${base}"
+      return 0
+    fi
+  else
+    base="$(base_branch "$repo")"
+    merged_into=""
+    if git -C "$repo" merge-base --is-ancestor "$sha" "$base" 2>/dev/null; then
+      merged_into="$base"
+    else
+      for alt in development develop origin/development origin/develop; do
+        if git -C "$repo" rev-parse --verify -q "$alt" >/dev/null 2>&1 \
+           && git -C "$repo" merge-base --is-ancestor "$sha" "$alt" 2>/dev/null; then
+          merged_into="$alt"
+          break
+        fi
+      done
+    fi
+    if [[ -z "$merged_into" ]]; then
+      wt_keep "$wt" "its branch ${br:-at ${sha:0:10}} is not merged into ${base}"
+      return 0
+    fi
+    base="$merged_into"
   fi
   # census: dependency dirs and their size (rebuildable output by name)
   deps="$(wt_dep_dirs "$wt")"
