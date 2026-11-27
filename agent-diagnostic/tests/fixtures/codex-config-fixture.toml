@@ -1,0 +1,12 @@
+# Codex CLI configuration — fixture (the values are the shape the audit reads, nothing here is live)
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model = "gpt-6.2-sol"
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+
+[mcp_servers.docs]
+command = "docs-server"
+env = { DOCS_TOKEN = "tok-fixture-codex-value" }

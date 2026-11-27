@@ -120,6 +120,7 @@ public enum Names {
         public static let guardian = "Cache Guardian"
         public static let network = "Network"
         public static let loginItems = "Login & Startup Items"
+        public static let agentDiagnostic = "Agent Diagnostic"
         public static let reports = "Reports"
         public static let trends = "Trends"
         public static let undo = "Undo"
@@ -713,6 +714,7 @@ public enum Names {
         case .recordings: Screen.oldRecordings
         case .guardian: Screen.guardian
         case .networkSnapshot: Screen.network
+        case .agentDiagnostic: Screen.agentDiagnostic
         case .memoryReport, .storageReport: Screen.reports
         case .installAgents, .uninstallAgents, .sudoersInstall: Screen.setup
         }

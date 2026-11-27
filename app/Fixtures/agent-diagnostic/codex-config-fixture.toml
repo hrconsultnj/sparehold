@@ -1,0 +1,13 @@
+# Codex config fixture (redacted) — the setup report reads approval, sandbox and
+# connectors from here; every value and address is invented.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[mcp_servers.docs]
+command = "/usr/local/bin/fixture-docs-mcp"
+
+[mcp_servers.build]
+url = "http://fixture-macbook.local:3111/mcp"
+
+[mcp_servers.broken]
+command = "/usr/local/bin/fixture-broken-mcp" # failed to connect on 2026-11-21 (the engine reads the tool's own log in the window)

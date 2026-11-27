@@ -1,0 +1,5 @@
+# sparehold agent diagnostic telemetry v1: layer records retention links gap
+host	pressure/spike/kill lines in guard.log	~5 MB rotation	pid	wired/swap/free-disk over time is missing
+agent	session files on disk	each tool's own policy	none across tools	a cross-tool correlation key does not exist
+process	forensic dumps at critical pressure	with the reports	pid	only the critical moment, never a series
+workflow	rule-outcomes.jsonl (would-have rows)	kept with the reports	rule id	nothing links a rule row to an agent session

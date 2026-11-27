@@ -1,0 +1,5 @@
+{"bug_type":"hang","captureTime":"2026-11-21T10:05:30+01:00","incident_id":"FIXTURE-C3D4E5F6-7A8B-4C9D-0E1F-2A3B4C5D6E7A","fixture_note":"A redacted hang report: the hang family is listed as hang, and the memory figures a hang body does not carry stay unknown rather than invented. Every name in this fixture is invented."}
+{
+  "procName" : "WindowServer",
+  "responsibleProcess" : "claunch"
+}

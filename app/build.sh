@@ -185,7 +185,7 @@ mkdir -p "$ENGINE"
 # git would accept. A plain recursive copy also swept up whatever happened to
 # sit in those folders on the build machine — editor and assistant session
 # state, local planning notes, .DS_Store — and shipped it inside the app.
-for dir in memory storage network lib; do
+for dir in memory storage network lib agent-diagnostic; do
   [[ -d "../$dir" ]] || continue
   if git -C .. rev-parse --git-dir >/dev/null 2>&1; then
     (cd .. && git ls-files -z --cached --others --exclude-standard -- "$dir") \

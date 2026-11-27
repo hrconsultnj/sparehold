@@ -1,0 +1,15 @@
+{"bug_type":"210","captureTime":"2026-11-21T09:03:45+01:00","incident_id":"FIXTURE-A1B2C3D4-5E6F-4A7B-8C9D-0E1F2A3B4C5D","fixture_note":"captureTime is exactly 67 minutes before the file-name time: the event wall clock reads 09:03:45 and the report was saved as Kernel-2026-11-21-101045.ips (10:10:45 on this report's own +01:00 clock). Every name, path, id and address in this fixture is invented."}
+{
+  "panicString" : "panic(cpu 2 caller 0xfffffe000a123456): userspace watchdog timeout: no successful checkins from claunch for 183 seconds\n\nThe claunch log at /Users/fixture-alice/Library/Logs/claunch.log had not rotated since 08:55, when free disk fell under 1 GB.",
+  "procName" : "claunch",
+  "pagesize" : 16384,
+  "pagesFree" : 65536,
+  "wired" : 393216,
+  "compressor" : 458752,
+  "compressorSegmentLimitReached" : true,
+  "swapfiles" : 3,
+  "swapUsage" : 12884901888,
+  "processByPid" : {
+    "412" : { "procName" : "claunch", "rpages" : 294912 }
+  }
+}

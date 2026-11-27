@@ -79,6 +79,21 @@ struct MemorySettingsView: View {
                 }
             }
 
+            Section("Flight Recorder") {
+                VStack(alignment: .leading, spacing: Tokens.Space.xxs) {
+                    Toggle("Record memory history", isOn: $config.memory.flightRecorder)
+                    Text("While on, the guard writes a small memory sample (pressure, swap, biggest dev processes) to a capped 1 MB file every minute — faster when memory tightens — so a freeze can be reconstructed afterwards.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button(role: .destructive) {
+                    try? FileManager.default.removeItem(at: AnalyzersPaths.flightRecorderRing)
+                } label: {
+                    Text("Delete Recording")
+                }
+                .help("Erase the recorded memory history. The recorder starts a fresh file the next time it writes.")
+            }
+
             Section {
                 // a choice between two lists, not categories: a segmented picker in the form
                 FullWidthSegments(options: ProcessListTab.allCases.map { ($0, $0.rawValue) }, selection: $processListTab)

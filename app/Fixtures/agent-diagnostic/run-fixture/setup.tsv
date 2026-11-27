@@ -1,0 +1,5 @@
+# sparehold agent diagnostic setup v1: tool topic key value grade citation
+claude-code	permission-mode	permissions.defaultMode	acceptEdits	confirmed	fixture: permissions.defaultMode
+claude-code	concurrency	CLAUDE_CODE_PARALLEL_TASK_COUNT	100	confirmed	fixture: env.CLAUDE_CODE_PARALLEL_TASK_COUNT
+claude-code	secret	ANTHROPIC_API_KEY	<value not read>	confirmed	fixture: env.ANTHROPIC_API_KEY (name only)
+codex	permission-mode	sandbox_mode	workspace-write	confirmed	fixture: sandbox_mode
