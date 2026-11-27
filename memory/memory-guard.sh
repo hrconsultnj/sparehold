@@ -13,6 +13,10 @@
 #                         this is the "package/playwright spiked" scenario.
 #   * Spike detection   → a safelisted process growing >400 MB per tick is
 #                         logged + notified before it becomes a problem.
+#   * Flight recorder   → GUARD_FLIGHT_RECORDER (0 = off, the default): one
+#                         memory-sample line per minute into the ring file
+#                         reports/memory/flight-recorder.tsv (1 MiB cap, faster
+#                         under pressure) so a freeze can be reconstructed.
 #   * Dev pass          → every GUARD_DEV_SWEEP_SECS (default 120) it starts
 #                         `memory-auto-clean.sh --apply --dev --quiet`, which
 #                         stops dev tooling that has gone IDLE — emulators and
@@ -77,6 +81,31 @@ DEV_SWEEP_SECS="${GUARD_DEV_SWEEP_SECS:-120}" # run the idle-dev-tooling pass th
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 FALLBACK_FILE="${LOG_DIR}/.guard-fallback.tsv"   # what the app's rules engine tells this script (lib/guard-select.sh)
 
+# ---------- flight recorder (off by default; the app writes these into config.local.sh's managed block) ----------
+# Records one memory-sample line per interval into a ring file so the hour
+# before a freeze can be reconstructed (Agent Diagnostic). Background work
+# only: it runs after every guard duty in the tick, appends and truncates
+# ONLY its own file below, and never goes near the system log (the first
+# thing to stall in a memory hang). Stock macOS reads: vm_stat, sysctl
+# vm.swapusage, df -k /, stat, tail, awk, date. bash 3.2 only.
+FLIGHT_RECORDER="${GUARD_FLIGHT_RECORDER:-0}"              # 1 = record (0 = off, the default)
+FLIGHT_INTERVAL="${GUARD_FLIGHT_INTERVAL:-60}"             # seconds between samples, slow rate
+FLIGHT_FAST_INTERVAL="${GUARD_FLIGHT_FAST_INTERVAL:-10}"   # fast rate while pressure >= 2 or swap grows
+FLIGHT_MAX_BYTES="${GUARD_FLIGHT_MAX_BYTES:-1048576}"      # 1 MiB ring cap
+RING_FILE="${LOG_DIR}/flight-recorder.tsv"                 # the only file the recorder writes
+# The headroom file: the present state an agent can check before spawning more
+# work (the Agent Diagnostic's "during" half). Default ON — it records nothing
+# new (the Monitor shows the same figures) and keeps no history; one small
+# file, atomically replaced every tick. GUARD_HEADROOM=0 stops the writes and
+# removes the file: an agent must never read a stale "fine" as current.
+HEADROOM="${GUARD_HEADROOM:-1}"
+HEADROOM_FILE="${LOG_DIR}/headroom.status"
+RING_HEADER='# sparehold flight recorder v1: iso epoch disk_free_gb swap_used_mb swap_files wired_mb compressed_mb pressure procs top5'
+# the copy the app writes (the data root's, the one sparehold_apply_paths prefers)
+CONFIG_LOCAL="${SPAREHOLD_USER_ROOT}/config.local.sh"
+LAST_FLIGHT_TS=0
+LAST_FLIGHT_SWAP_MB=0
+
 # what the guard is ALLOWED to kill (dev tooling only). Binary names are
 # anchored ((^|/)name( |$)) so `bun` can't substring-match "usbaudio.bundle".
 KILLABLE_RE='(^|/)(node|npm|npx|bun|tsx|deno)( |$)|next-server|next dev|vite|esbuild|webpack|turbo|tsup|vitest|jest|playwright|headless_shell|--headless|ms-playwright'
@@ -121,6 +150,127 @@ read_fallback() {
   [[ "$GUARD_SELECT_OK" -eq 1 && -r "$FALLBACK_FILE" ]] || return 0
   local fb
   fb="$(guard_fallback_value "$FALLBACK_FILE" pause)"; FALLBACK_PAUSE=0; [[ "$fb" == 1 ]] && FALLBACK_PAUSE=1
+  return 0
+}
+
+# The four FLIGHT knobs are re-read from config.local.sh every tick (one awk
+# pass over the file the guard already reads) so the app's switch takes effect
+# at the next tick without restarting the guard — the same reason read_fallback
+# re-reads the pause. Only a plain integer changes a value; a commented line,
+# quotes or anything else keep what the guard started with.
+flight_read_knobs() {
+  [[ -r "$CONFIG_LOCAL" ]] || return 0
+  local line
+  line="$(awk -v q="\"'" '
+    # q holds the two quote characters: building the class from it strips both
+    # kinds of quoting (the string alone would match a two-char sequence only)
+    function flightval() { v = $0; sub(/^[^=]*=/, "", v); sub(/[[:space:]]*#.*$/, "", v); gsub("[" q "]", "", v); gsub(/[[:space:]]/, "", v) }
+    /^[[:space:]]*GUARD_FLIGHT_RECORDER=/     { flightval(); rec = v }
+    /^[[:space:]]*GUARD_FLIGHT_INTERVAL=/     { flightval(); slow = v }
+    /^[[:space:]]*GUARD_FLIGHT_FAST_INTERVAL=/{ flightval(); fast = v }
+    /^[[:space:]]*GUARD_FLIGHT_MAX_BYTES=/    { flightval(); cap = v }
+    /^[[:space:]]*GUARD_HEADROOM=/            { flightval(); hr = v }
+    # "|", not a tab: empty leading fields must survive the read, and tab is
+    # IFS whitespace — a config carrying only GUARD_HEADROOM would collapse
+    # the four empties and land the value in a recorder knob
+    END { printf "%s|%s|%s|%s|%s\n", rec, slow, fast, cap, hr }
+  ' "$CONFIG_LOCAL" 2>/dev/null)"
+  local rec slow fast cap hr
+  IFS='|' read -r rec slow fast cap hr <<<"$line"
+  case "$rec" in 0|1) FLIGHT_RECORDER="$rec" ;; esac
+  case "$slow" in ''|*[!0-9]*) ;; *) FLIGHT_INTERVAL="$slow" ;; esac
+  case "$fast" in ''|*[!0-9]*) ;; *) FLIGHT_FAST_INTERVAL="$fast" ;; esac
+  case "$cap" in ''|*[!0-9]*) ;; *) FLIGHT_MAX_BYTES="$cap" ;; esac
+  case "$hr" in 0|1) HEADROOM="$hr" ;; esac
+  return 0
+}
+
+# swap in use, whole MB — one stock read, 0 when it cannot be read
+flight_swap_mb() {
+  sysctl -n vm.swapusage 2>/dev/null | awk '
+    $4 == "used" { v = $6; sub(/M$/, "", v); printf "%d", v; seen = 1 }
+    END { if (!seen) printf "0" }'
+}
+
+# wired and compressed memory, whole MB, one vm_stat read ("wired comp") —
+# the shared read behind the recorder's sample and the headroom file, so the
+# two never drift apart on what the figures mean
+flight_vm_mb() {
+  vm_stat 2>/dev/null | awk '
+    /page size of/   { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) page = $i }
+    /^Pages wired down/ { v = $NF; sub(/\./, "", v); wired = v }
+    /^Pages (occupied|stored) by compressor/ { v = $NF; sub(/\./, "", v); comp = v }
+    END {
+      if (page == "") page = 16384
+      printf "%d %d", (wired == "" ? 0 : wired) * page / 1048576, (comp == "" ? 0 : comp) * page / 1048576
+    }'
+}
+
+# $1 = pressure level, $2 = now (epoch), $3 = the tick's ps table (reused —
+# the recorder spawns no ps of its own). One TSV line appended straight to the
+# ring file and flushed, then the size cap keeps the newest half.
+flight_record() {
+  flight_read_knobs
+  [[ "$FLIGHT_RECORDER" == "1" ]] || return 0
+  local level="${1:-1}" now="${2:-0}" ptable="${3:-}"
+  local swap_mb="" elapsed=$((now - LAST_FLIGHT_TS))
+  if [[ "$level" -ge 2 ]]; then
+    [[ "$elapsed" -ge "$FLIGHT_FAST_INTERVAL" ]] || return 0
+  elif [[ "$elapsed" -lt "$FLIGHT_FAST_INTERVAL" ]]; then
+    return 0
+  elif [[ "$elapsed" -lt "$FLIGHT_INTERVAL" ]]; then
+    # inside the slow window but past the fast one: only growth of swap since
+    # the previous sample pulls the rate up (the one extra read, recorder-only)
+    swap_mb="$(flight_swap_mb)"
+    [[ "$swap_mb" -gt "$LAST_FLIGHT_SWAP_MB" ]] || return 0
+  fi
+
+  # figures, each from one stock macOS read; a read that fails leaves 0
+  local iso
+  iso="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  [[ ${#iso} -eq 24 ]] && iso="${iso:0:22}:${iso:22}"     # +0100 → +01:00
+  [[ -n "$swap_mb" ]] || swap_mb="$(flight_swap_mb)"
+  [[ -n "$swap_mb" ]] || swap_mb=0
+  local swap_files=0 sf
+  for sf in /System/Volumes/VM/swapfile*; do [[ -e "$sf" ]] && swap_files=$((swap_files + 1)); done
+  local vm_parts wired_mb=0 comp_mb=0
+  vm_parts="$(flight_vm_mb)"
+  wired_mb="${vm_parts%% *}"; comp_mb="${vm_parts#* }"
+  [[ -n "$wired_mb" ]] || wired_mb=0
+  [[ -n "$comp_mb" ]] || comp_mb=0
+  local disk_gb
+  disk_gb="$(df -k / 2>/dev/null | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }')"
+  [[ -n "$disk_gb" ]] || disk_gb=0
+  local procs=0 top5=""
+  if [[ -n "$ptable" ]]; then
+    procs="$(printf '%s\n' "$ptable" | awk 'END { print NR }')"
+    # top 5 by RSS, command NAME only — never args or paths
+    top5="$(printf '%s\n' "$ptable" | sort -k2,2 -rn | awk '
+      NF >= 3 { n = split($3, p, "/"); line = line p[n] ":" int($2 / 1024) ";"; if (++kept >= 5) exit }
+      END { sub(/;$/, "", line); print line }')"
+    [[ -n "$top5" ]] || top5="-"
+  fi
+
+  # append directly to the ring (never through the system log) and flush
+  [[ -f "$RING_FILE" ]] || printf '%s\n' "$RING_HEADER" > "$RING_FILE" 2>/dev/null || return 0
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$iso" "$now" "$disk_gb" "$swap_mb" "$swap_files" "$wired_mb" "$comp_mb" \
+    "$level" "$procs" "$top5" >> "$RING_FILE" 2>/dev/null || return 0
+  sync -f "$RING_FILE" 2>/dev/null || sync    # the line is on disk before we return
+  LAST_FLIGHT_TS=$now
+  LAST_FLIGHT_SWAP_MB=$swap_mb
+  [[ "$VERBOSE" -eq 1 ]] && echo "flight recorder: sample written to $RING_FILE"
+  # ring cap: over the limit, keep the header and the newest half of the lines
+  # (tmp + mv, so a reader never sees a torn file; the guard's single-writer
+  # lock is the only lock this needs)
+  local size tmp
+  size="$(stat -f '%z' "$RING_FILE" 2>/dev/null)"
+  case "$size" in ''|*[!0-9]*) size=0 ;; esac
+  if [[ "$size" -gt "$FLIGHT_MAX_BYTES" ]]; then
+    tmp="${RING_FILE}.tmp"
+    awk 'NR == FNR { total = NR; next } FNR == 1 { print; next } FNR > total / 2 { print }' \
+      "$RING_FILE" "$RING_FILE" > "$tmp" 2>/dev/null && mv -f "$tmp" "$RING_FILE"
+  fi
   return 0
 }
 
@@ -263,6 +413,57 @@ if [[ -f "$LOG_FILE" && $(stat -f '%z' "$LOG_FILE" 2>/dev/null || echo 0) -gt 52
   mv "$LOG_FILE" "${LOG_FILE}.1"
 fi
 
+# ---------- headroom file: the present state an agent can check (default on) ----------
+# One atomically-replaced file per tick. The figures are the same stock reads
+# the recorder takes; the session count is the live-session exemption's ROOTS
+# counted from the tick's own process table (no extra ps). Nothing here has
+# history — the Monitor shows the same figures, and Sparehold never reads this
+# file back for any decision: agents check it, the agent decides.
+headroom_write() {
+  flight_read_knobs
+  if [[ "$HEADROOM" != "1" ]]; then
+    rm -f "${HEADROOM_FILE}.tmp" "$HEADROOM_FILE" 2>/dev/null   # a switched-off guard must not leave a stale "fine"
+    return 0
+  fi
+  local level="${1:-1}" now="${2:-0}" ptable="${3:-}"
+  local swap_mb swap_files=0 sf wired_mb=0 comp_mb=0 disk_gb sessions=0 roots="" iso
+  swap_mb="$(flight_swap_mb)"; [[ -n "$swap_mb" ]] || swap_mb=0
+  for sf in /System/Volumes/VM/swapfile*; do [[ -e "$sf" ]] && swap_files=$((swap_files + 1)); done
+  local vm
+  vm="$(flight_vm_mb)"
+  wired_mb="${vm%% *}"; comp_mb="${vm#* }"
+  [[ -n "$wired_mb" ]] || wired_mb=0
+  [[ -n "$comp_mb" ]] || comp_mb=0
+  disk_gb="$(df -k / 2>/dev/null | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }')"
+  [[ -n "$disk_gb" ]] || disk_gb=0
+  if [[ "$LIVE_SESSIONS_OK" -eq 1 ]]; then
+    # the tick's table is pid rss args; the session filter reads pid args —
+    # strip both leading numbers and put the pid back, no extra ps
+    if declare -F _live_session_filter >/dev/null 2>&1; then
+      roots="$(printf '%s\n' "$ptable" | awk '{ pid = $1; sub(/^[ \t]*[0-9]+[ \t]+/, ""); sub(/^[ \t]*[0-9]+[ \t]+/, ""); print pid " " $0 }' | _live_session_filter | tr '\n' ' ')"
+    else
+      roots="$(live_session_roots)"
+    fi
+    sessions="$(printf '%s' "$roots" | awk '{ print NF }')"
+  fi
+  iso="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  [[ ${#iso} -eq 24 ]] && iso="${iso:0:22}:${iso:22}"
+  # the whole file lands as one rename: an agent never reads half a file
+  printf '%s\n' \
+    "# sparehold headroom v1 — what this Mac can take on right now; check this before spawning more work" \
+    "disk_free_gb: $disk_gb" \
+    "swap_used_mb: $swap_mb" \
+    "swap_files: $swap_files" \
+    "wired_mb: $wired_mb" \
+    "compressed_mb: $comp_mb" \
+    "pressure: $level" \
+    "procs: $(printf '%s\n' "$ptable" | awk 'END { print NR }')" \
+    "agent_sessions: $sessions" \
+    "updated: $iso" \
+    > "${HEADROOM_FILE}.tmp" 2>/dev/null || return 0
+  mv "${HEADROOM_FILE}.tmp" "$HEADROOM_FILE" 2>/dev/null || return 0
+}
+
 tick() {
   read_fallback
   [[ -e "$PAUSE_FLAG" || "$FALLBACK_PAUSE" == 1 ]] && return 0
@@ -390,6 +591,15 @@ tick() {
   else
     : > "$CPU_STATE_FILE"
   fi
+
+  # --- 5. flight recorder: one memory sample into its own ring file (off by
+  #        default). Runs after every guard duty above; skipped wholesale by
+  #        the pause check at the top of the tick, like the rest. Reuses the
+  #        tick's ps table — it spawns no ps of its own.
+  flight_record "$level" "$now" "$ptable"
+
+  # --- 6. the headroom file: the present state, atomically replaced (default on) ---
+  headroom_write "$level" "$now" "$ptable"
 }
 
 while :; do

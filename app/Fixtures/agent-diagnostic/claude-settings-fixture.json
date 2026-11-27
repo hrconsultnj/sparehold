@@ -1,0 +1,22 @@
+{
+  "permissions" : {
+    "defaultMode" : "bypassPermissions"
+  },
+  "hooks" : {
+    "PreToolUse" : [
+      { "matcher" : "Bash", "hooks" : [ { "type" : "command", "command" : "/usr/bin/true" } ] }
+    ],
+    "Stop" : [
+      { "hooks" : [ { "type" : "command", "command" : "/usr/bin/true" } ] }
+    ]
+  },
+  "env" : {
+    "CLAUDE_CODE_PARALLEL_TASK_COUNT" : "100",
+    "ANTHROPIC_API_KEY" : "sk-fixture-secret-value",
+    "CLAUDE_FIXTURE_HEADER_TOKEN" : "ghp_fixtureplaceholdervalue000000000"
+  },
+  "mcpServers" : {
+    "docs" : { "command" : "/usr/local/bin/fixture-docs-mcp" },
+    "build" : { "url" : "http://fixture-macbook.local:3111/mcp" }
+  }
+}

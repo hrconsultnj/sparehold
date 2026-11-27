@@ -44,7 +44,7 @@ public enum JobKindError: Error, Sendable, Equatable, CustomStringConvertible {
 public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case memoryClean, reclaim, storageClean, janitor, tempClean, tmReclaim, spotlight, loginItems
     case unusedApps, recordings, guardian
-    case networkSnapshot, memoryReport, storageReport
+    case networkSnapshot, memoryReport, storageReport, agentDiagnostic
     case installAgents, uninstallAgents, sudoersInstall, eject
 
     public var id: String { rawValue }
@@ -57,7 +57,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .memoryClean, .reclaim, .storageClean, .janitor, .tempClean, .tmReclaim,
              .spotlight, .loginItems, .unusedApps, .recordings, .guardian: true
-        case .networkSnapshot, .memoryReport, .storageReport,
+        case .networkSnapshot, .memoryReport, .storageReport, .agentDiagnostic,
              .installAgents, .uninstallAgents, .sudoersInstall, .eject: false
         }
     }
@@ -93,7 +93,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .recordings: .cleanupRecordings
         case .guardian: .guardian
         case .tmReclaim: .tmReclaim
-        case .networkSnapshot, .memoryReport, .storageReport,
+        case .networkSnapshot, .memoryReport, .storageReport, .agentDiagnostic,
              .installAgents, .uninstallAgents, .sudoersInstall: nil
         }
     }
@@ -118,6 +118,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .guardian: return [root.appending(path: "storage/guardian.sh")]
         case .networkSnapshot: return [AnalyzersPaths.networkScript]
         case .memoryReport: return [AnalyzersPaths.memoryAnalyzeScript]
+        case .agentDiagnostic: return [root.appending(path: "agent-diagnostic/agent-diagnostic.sh")]
         case .storageReport: return [AnalyzersPaths.storageAnalyzeScript]
         case .installAgents, .uninstallAgents:
             return [root.appending(path: "memory/memory-manage-agents.sh"),
@@ -141,6 +142,7 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case (.guardian, .preview): return "run the Guardian preview"
         case (.guardian, .apply): return "apply the Guardian"
         case (.memoryReport, _), (.storageReport, _): return "write the report"
+        case (.agentDiagnostic, _): return "run the diagnostic"
         case (.networkSnapshot, _): return "take the snapshot"
         case (.installAgents, _): return "install the background jobs"
         case (.uninstallAgents, _): return "turn off the background jobs"
@@ -181,8 +183,8 @@ public enum JobKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .memoryClean, .reclaim: "--only-pids"
         case .storageClean, .janitor, .tempClean, .loginItems, .unusedApps, .recordings, .guardian: "--only-paths"
         case .spotlight, .tmReclaim: nil
-        case .networkSnapshot, .memoryReport, .storageReport, .installAgents, .uninstallAgents,
-             .sudoersInstall, .eject: nil     // not cleaners: no apply
+        case .networkSnapshot, .memoryReport, .storageReport, .agentDiagnostic,
+             .installAgents, .uninstallAgents, .sudoersInstall, .eject: nil     // not cleaners: no apply
         }
     }
 

@@ -257,6 +257,11 @@ if args.first == "--probe-login-removal" {
 if args.first == "--probe-quit" {
     await probeQuit()
 }
+// `--probe-agent-diagnostic`: the Agent Diagnostic's parsers on the fixtures — header-vs-file time,
+// grading rules, the secret-value drop, the ring, header parity. See AgentDiagnosticProbes.swift.
+if args.first == "--probe-agent-diagnostic" {
+    probeAgentDiagnostic()
+}
 
 // System screens: `--probe-startup [--file <login-items.tsv>]` (Login & Startup
 // Items), `--probe-startup-changes [--log <persistence.log>]` (its Changes scope),

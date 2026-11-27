@@ -37,6 +37,24 @@ extension HowItWorksTopic {
                 question: .init(ask: "Is anything captured or blocked?",
                                 answer: "No. Only the totals the system already keeps are read, and only when you take a snapshot; nothing is watched while you are not looking."))
 
+        case .agentDiagnostic:
+            return TopicContent(
+                summary: "What led up to a freeze, rebuilt from the records that already exist.",
+                what: "When the Mac freezes or restarts unexpectedly, the crash report alone explains little — the evidence is scattered across crash reports, the system log, launchd jobs and the Memory Guard's own record. The Agent Diagnostic reads them all together, for the hour around the event, and grades what it finds: confirmed (with the line or log it came from), plausible, or unknown.",
+                does: [
+                    "Run reads the newest crash report's own header time — never the file name's, which can be saved long after the event — and rebuilds the hour around it: when the disk was freed, when the Memory Guard noticed pressure, which jobs fired or were created, which agent sessions were active.",
+                    "The Jobs Audit lists every launchd job with the line that trips each check: a call with no timeout, a log that grows forever, a path that is not there, an unattended merge or keystroke injection.",
+                    "Agent Setup reads what Claude Code and Codex are set to — with one rule: a key that looks like a secret shows its name and never its value, dropped before anything is shown.",
+                    "Copy Evidence puts the redacted markdown on your clipboard: nothing personal, nothing secret, ready to paste into a bug report.",
+                ],
+                onThisMac: [],
+                never: ["The diagnostic only reads. It never edits, stops, deletes or signals anything, and it never runs what it inspects. The decision list recommends — there is no Apply button anywhere on it."],
+                written: ["Each run writes its own folder under reports/agent-diagnostic/, plus the Memory Guard's headroom file — the present state an agent can check before spawning more work."],
+                actions: [.init(title: "Open \(Names.Screen.agentDiagnostic)", detail: "The timeline, the jobs audit and the findings of the newest run",
+                                target: "agentDiagnostic")],
+                question: .init(ask: "The file name says one time and the report says another — which is right?",
+                                answer: "The report's header is when it happened; the file name is when it was saved. They can disagree by many minutes, so the timeline anchors on the header and shows the divergence as its own finding."))
+
         case .askAgent:
             let prelude = f.agentPreludeSet
                 ? "You have written your own extra instructions, which it reads before every answer."

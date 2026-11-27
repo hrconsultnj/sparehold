@@ -64,10 +64,10 @@ fi
 main_worktree="$(git worktree list --porcelain | awk '
   /^worktree / { path = substr($0, 10) }
   $0 == "branch refs/heads/main" { print path; exit }')"
+need_main_worktree=0
 if [[ -z "$main_worktree" ]]; then
-  echo "cut-release: no worktree has main checked out. Create the release worktree once:" >&2
-  echo "  git worktree add .composure/workspaces/main main" >&2
-  exit 1
+  main_worktree="$root/.composure/workspaces/main"
+  need_main_worktree=1
 fi
 
 # Every check, on this Mac, before anything changes. This is the release's
@@ -172,11 +172,17 @@ run git push origin development
 # ── 5. merge into main — this is what ships ────────────────────────────────
 say "merging into main in $main_worktree"
 if (( dry_run )); then
+  (( need_main_worktree )) && echo "  [dry-run] git worktree add $main_worktree main"
   echo "  [dry-run] git -C $main_worktree merge --no-ff development -m \"$subject\""
   echo "  [dry-run] the hook on main then runs scripts/release.sh: push main, publish $tag"
   echo "  [dry-run] then: fetch tags, fast-forward development to main, push development"
+  echo "  [dry-run] git worktree remove $main_worktree (once synced & clean)"
   echo "cut-release [dry-run]: every check passed; nothing was changed."
   exit 0
+fi
+if (( need_main_worktree )) && [[ ! -d "$main_worktree" ]]; then
+  say "creating ephemeral release worktree at $main_worktree"
+  git worktree add "$main_worktree" main
 fi
 (
   cd "$main_worktree" || exit 1
@@ -211,6 +217,15 @@ if git merge --ff-only main >/dev/null 2>&1; then
   fi
 else
   echo "cut-release: note — development could not be fast-forwarded to main. Merge main into development by hand." >&2
+fi
+
+# Clean up the release worktree once synced with origin/main and clean.
+if [[ -d "$main_worktree" ]] && [[ "$(git -C "$main_worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)" == "main" ]] \
+   && [[ -z "$(git -C "$main_worktree" status --porcelain 2>/dev/null)" ]] \
+   && [[ "$(git -C "$main_worktree" rev-parse HEAD 2>/dev/null || true)" == "$(git -C "$main_worktree" rev-parse origin/main 2>/dev/null || echo "__mismatch__")" ]]; then
+  if git -C "$root" worktree remove "$main_worktree" >/dev/null 2>&1; then
+    say "removed ephemeral release worktree ($main_worktree)"
+  fi
 fi
 
 # ── 8. development's own version ────────────────────────────────────────────

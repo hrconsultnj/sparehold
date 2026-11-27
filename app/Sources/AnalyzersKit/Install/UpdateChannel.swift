@@ -93,11 +93,41 @@ public struct BetaFeed: Equatable, Sendable, Codable {
     public var newestBeta: String?
     /// "2.72.0": the newest published release.
     public var newestRelease: String?
+    /// The minimum macOS the newest beta's body declares ("26", "26.1", from lib/min-macos.sh's release
+    /// comment); nil when it declares none, so the gate only ever refuses what it can prove.
+    public var newestBetaMinimum: String?
+    /// The same, for the newest release.
+    public var newestReleaseMinimum: String?
 
-    public init(status: String = "ok", newestBeta: String? = nil, newestRelease: String? = nil) {
+    public init(status: String = "ok", newestBeta: String? = nil, newestRelease: String? = nil,
+                newestBetaMinimum: String? = nil, newestReleaseMinimum: String? = nil) {
         self.status = status
         self.newestBeta = newestBeta
         self.newestRelease = newestRelease
+        self.newestBetaMinimum = newestBetaMinimum
+        self.newestReleaseMinimum = newestReleaseMinimum
+    }
+
+    /// A feed cached before the minimums existed decodes as "none declared", not as garbage.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(String.self, forKey: .status)
+        newestBeta = try container.decodeIfPresent(String.self, forKey: .newestBeta)
+        newestRelease = try container.decodeIfPresent(String.self, forKey: .newestRelease)
+        newestBetaMinimum = try container.decodeIfPresent(String.self, forKey: .newestBetaMinimum)
+        newestReleaseMinimum = try container.decodeIfPresent(String.self, forKey: .newestReleaseMinimum)
+    }
+
+    /// The minimum macOS of what Beta offers (the newer of the beta and the release).
+    public var targetMinimum: String? {
+        guard target != nil else { return nil }
+        switch (newestBeta, newestRelease) {
+        case let (beta?, release?):
+            return UpdateChecker.isNewer(release, than: beta) ? newestReleaseMinimum : newestBetaMinimum
+        case (_?, nil): return newestBetaMinimum
+        case (nil, _?): return newestReleaseMinimum
+        default: return nil
+        }
     }
 
     /// What Beta offers: the newer of the newest beta and the newest release. A beta is only ever the newest

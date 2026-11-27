@@ -8,6 +8,16 @@ bullet as a feature of its own, so every bullet ends with a short tag that
 GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
+## v3.6.0 — What Led Up to the Freeze
+<!-- wn: released=2026-11-27 -->
+
+A freeze leaves records scattered where nobody reads them together. 3.6.0 reads them together — and makes sure the next update you're offered is one this Mac can actually run.
+
+- The Agent Diagnostic rebuilds the hour around a freeze from the records that already exist — crash reports (by their header time, not the file name's), the purge lines, boots, the guard's record, agent sessions and every launchd job with the line that trips it — graded confirmed, plausible or unknown, and it never changes anything. <!-- wn: open=agentDiagnostic icon=stethoscope title="The Agent Diagnostic" -->
+- An update this Mac cannot run is never offered: every release carries its minimum macOS, and an offer past it says what it needs instead of pretending to be installable. <!-- wn: open=update icon=arrow.down.circle title="Updates That Can Actually Run" -->
+- The Memory Guard can keep a flight recorder: a small ring of wired, swap, free-disk and pressure samples, off by default and capped at one megabyte, that writes straight to disk even when the machine is crawling. <!-- wn: open=memory icon=record.circle title="The Flight Recorder" -->
+- The guard also keeps a headroom file — one small line of what this Mac can take on (free disk, swap, pressure, running agent sessions), overwritten every minute, so an agent can check it before spawning more work. <!-- wn: open=memory icon=gauge title="Agents Check Before They Spawn" -->
+
 ## v3.5.0 — Everything You See, You Can Act On
 <!-- wn: released=2026-11-22 -->
 

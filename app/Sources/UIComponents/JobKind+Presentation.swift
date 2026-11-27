@@ -24,6 +24,7 @@ extension JobKind {
         case .recordings: "waveform"
         case .guardian: "shield.lefthalf.filled"
         case .networkSnapshot: "network"
+        case .agentDiagnostic: "stethoscope"
         case .memoryReport, .storageReport: "doc.text.magnifyingglass"
         case .installAgents, .uninstallAgents: "clock.badge.checkmark"
         case .sudoersInstall: "lock.open"
@@ -45,6 +46,7 @@ extension JobKind {
         case .recordings: .red
         case .guardian: .indigo
         case .networkSnapshot: .purple
+        case .agentDiagnostic: .orange
         case .memoryReport, .storageReport: .purple
         case .installAgents, .uninstallAgents, .sudoersInstall: .gray
         case .eject: .mint

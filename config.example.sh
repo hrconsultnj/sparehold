@@ -130,6 +130,18 @@
 #ANALYZERS_STACK_OWNER_MAP="scratch-*=my-project"  # glob=project entries (space or comma separated) for stacks no repo config names, or that another project also uses. A stack is kept while ANY of its owners (the repo found automatically AND every owner-map project) has a live session. A project is a repo folder name or its full path.
 #ANALYZERS_STACK_REPO_ROOTS="$HOME/Projects"        # where to look for repos of stacks with no live session (searched 3 levels down)
 
+# Flight recorder (memory-guard.sh, Agent Diagnostic). When on, the guard
+# appends one memory-sample line per interval to reports/memory/flight-recorder.tsv
+# (a size-capped ring) so the stretch before a freeze can be reconstructed
+# afterwards. The app's Settings own these keys; they are re-read every tick.
+#GUARD_HEADROOM=1               # 1 = the guard overwrites reports/memory/headroom.status
+                                #     every tick (disk, swap, pressure, agent sessions) so an
+                                #     agent can check it before spawning more work; 0 removes it
+#GUARD_FLIGHT_RECORDER=0        # 1 = record (0 = off, the default)
+#GUARD_FLIGHT_INTERVAL=60       # seconds between samples, slow rate
+#GUARD_FLIGHT_FAST_INTERVAL=10  # fast rate while pressure >= 2 or swap grows
+#GUARD_FLIGHT_MAX_BYTES=1048576 # ring cap; over it, the newest half is kept
+
 # ── which bash the memory cleaner hands over to ─────────────────────────────
 # macOS ships bash 3.2. The developer-tools checks in memory-auto-clean.sh
 # need bash 4 or newer, so when the script finds itself on an older one it

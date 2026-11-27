@@ -1,0 +1,5 @@
+# sparehold agent diagnostic jobs v1: label plist script trigger loaded last_run purpose check_id line_no line_text grade
+com.fixture.sync	LaunchAgents/com.fixture.sync.plist	scripts/sync-repos.sh	every 86400s	not loaded	-	fixture sync	no-timeout	6	git fetch --all --prune	plausible
+com.fixture.sync	LaunchAgents/com.fixture.sync.plist	scripts/sync-repos.sh	every 86400s	not loaded	-	fixture sync	unbounded-log	7	echo "$(date '+%Y-%m-%d %H:%M:%S') sync done" >> "$HOME/Library/Logs/sync-repos.log"	plausible
+com.fixture.prwatch	LaunchAgents/com.fixture.prwatch.plist	scripts/pr-merge.sh	every 900s	loaded	-	fixture pr watch	dangerous-action	5	gh pr merge --auto --squash --repo fixture-org/fixture-repo	confirmed
+com.fixture.typewriter	LaunchAgents/com.fixture.typewriter.plist	scripts/type-report.sh	at load	loaded	-	fixture typewriter	clean	-	-	clean

@@ -67,6 +67,7 @@ public enum Names {
         public static let loginItems = "Login & Startup Items"
         public static let network = "Network"
         public static let askAgent = "The Ask Agent"
+        public static let agentDiagnostic = "The Agent Diagnostic"
         public static let whereWritten = "Where Everything Is Written"
         public static let editByHand = "Settings You Can Edit by Hand"
         public static let healthReport = "Mac Health Report"
@@ -120,6 +121,7 @@ public enum Names {
         public static let guardian = "Cache Guardian"
         public static let network = "Network"
         public static let loginItems = "Login & Startup Items"
+        public static let agentDiagnostic = "Agent Diagnostic"
         public static let reports = "Reports"
         public static let trends = "Trends"
         public static let undo = "Undo"
@@ -625,6 +627,15 @@ public enum Names {
         public static let history = "History"
     }
 
+    public enum DiagnosticScope {
+        public static let timeline = "Timeline"
+        public static let jobs = "Jobs Audit"
+        public static let setup = "Agent Setup"
+        public static let telemetry = "Telemetry"
+        public static let findings = "Findings"
+        public static let decisions = "Decisions"
+    }
+
     // MARK: - table column titles
 
     /// The title of a column in `OutlineTable`, so the same column is called
@@ -713,6 +724,7 @@ public enum Names {
         case .recordings: Screen.oldRecordings
         case .guardian: Screen.guardian
         case .networkSnapshot: Screen.network
+        case .agentDiagnostic: Screen.agentDiagnostic
         case .memoryReport, .storageReport: Screen.reports
         case .installAgents, .uninstallAgents, .sudoersInstall: Screen.setup
         }

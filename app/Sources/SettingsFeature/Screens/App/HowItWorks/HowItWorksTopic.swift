@@ -29,6 +29,7 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
     case measures, guardSteps, guardNever, rowLocks, cleanup
     case safeToRemove, downloadsTemp, timeMachine, unusedApps, oldRecordings
     case loginItems, network, askAgent
+    case agentDiagnostic
     case whereWritten, editByHand, healthReport, privacy, trashVsUndo
 
     var id: String { rawValue }
@@ -37,7 +38,7 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         switch self {
         case .measures, .guardSteps, .guardNever, .rowLocks, .cleanup: .memory
         case .safeToRemove, .downloadsTemp, .timeMachine, .unusedApps, .oldRecordings: .storage
-        case .loginItems, .network, .askAgent: .system
+        case .loginItems, .network, .askAgent, .agentDiagnostic: .system
         case .whereWritten, .editByHand, .healthReport, .privacy, .trashVsUndo: .yourData
         }
     }
@@ -57,6 +58,7 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         case .loginItems: Names.HowItWorks.loginItems
         case .network: Names.HowItWorks.network
         case .askAgent: Names.HowItWorks.askAgent
+        case .agentDiagnostic: Names.HowItWorks.agentDiagnostic
         case .whereWritten: Names.HowItWorks.whereWritten
         case .editByHand: Names.HowItWorks.editByHand
         case .healthReport: Names.HowItWorks.healthReport
@@ -80,6 +82,7 @@ enum HowItWorksTopic: String, CaseIterable, Identifiable, Hashable, Codable, Sen
         case .loginItems: "person.crop.circle.badge.questionmark"
         case .network: "network"
         case .askAgent: "sparkles"
+        case .agentDiagnostic: "stethoscope"
         case .whereWritten: "doc.text"
         case .editByHand: "slider.horizontal.3"
         case .healthReport: "heart.text.square"

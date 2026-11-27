@@ -26,6 +26,8 @@ public enum AnalyzersPaths {
     public static let home: URL = homeChoice.withLock { $0 } ?? FileManager.default.homeDirectoryForCurrentUser
 
     public static let memoryReports = userRoot.appending(path: "reports/memory")
+    /// The Agent Diagnostic's runs: one folder per day, one timestamped run inside it.
+    public static let agentDiagnosticReports = userRoot.appending(path: "reports/agent-diagnostic")
     public static let storageReports = userRoot.appending(path: "reports/storage")
 
     /// Where the APP WRITES its own records — never the bundle. Whichever copy
@@ -77,6 +79,10 @@ public enum AnalyzersPaths {
     public static let guardLog = memoryReports.appending(path: "guard.log")
     public static let memoryAutoCleanLog = memoryReports.appending(path: "auto-clean.log")
     public static let reclaimLog = memoryReports.appending(path: "reclaim.log")
+    /// The Memory Guard's flight-recorder ring (off by default; the recorder writes it, Delete Recording truncates it).
+    public static let flightRecorderRing = memoryReports.appending(path: "flight-recorder.tsv")
+    /// The headroom file the guard overwrites each tick (phase two of the Agent Diagnostic; agents read it, the app never decides on it).
+    public static let headroomFile = memoryReports.appending(path: "headroom.status")
     public static let storageAutoCleanLog = storageReports.appending(path: "auto-clean.log")
     public static let guardianLog = storageReports.appending(path: "guardian.log")
     public static let loginItemsAuditLog = storageReports.appending(path: "login-items-audit.log")

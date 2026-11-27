@@ -1,0 +1,13 @@
+{"bug_type":"29","captureTime":"2026-11-21T08:12:00+01:00","incident_id":"FIXTURE-B2C3D4E5-6F7A-4B8C-9D0E-1F2A3B4C5D6E","fixture_note":"A redacted jetsam report: one of the past wired-memory baselines the issue compares against. Every name, path and id in this fixture is invented."}
+{
+  "procName" : "node",
+  "pagesize" : 16384,
+  "pagesFree" : 16384,
+  "wired" : 327680,
+  "compressor" : 262144,
+  "swapfiles" : 2,
+  "swapUsage" : 3221225472,
+  "perProcess" : {
+    "node" : { "rpages" : 81920, "reason" : "per-process-limit" }
+  }
+}

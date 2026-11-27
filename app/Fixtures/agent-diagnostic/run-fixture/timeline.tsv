@@ -1,0 +1,6 @@
+# sparehold agent diagnostic timeline v1: kind iso epoch summary source
+report	2026-11-21T10:03:45+01:00	1795251825	report (bug_type 210): Kernel-2026-11-21-101045.ips — claunch · panic(cpu 2 caller 0xfffffe000a123456)	DiagnosticReports
+report	2026-11-21T10:03:45+01:00	1795251825	saved 67 min after it happened: the file name says 2026-11-21T10:10:45+0100, the report's header says 2026-11-21T09:03:45.000+0100	DiagnosticReports
+purge	2026-11-21T09:40:00+01:00	1795250400	CacheDelete freed 4.1 GB; free disk at 2.3 GB	unified log
+guard	2026-11-21T09:55:00+01:00	1795251300	PRESSURE critical for 3 samples — watching	guard.log
+recorder	2026-11-21T10:13:00+01:00	1795252380	disk free 3.1 GB, swap 4608 MB, pressure 3	flight-recorder.tsv

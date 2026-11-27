@@ -96,6 +96,14 @@ git archive --format=tar.gz --prefix="sparehold/" -o "$artifact" main
 
 notes="$(mktemp)"
 "$root/scripts/changelog-check.sh" --print "$version" > "$notes"
+# the minimum macOS this build requires, as a comment GitHub hides (lib/min-macos.sh):
+# the app reads it back and never offers this release to a Mac that cannot launch it
+if [[ -f "$root/lib/min-macos.sh" ]]; then
+  # shellcheck source=../lib/min-macos.sh
+  source "$root/lib/min-macos.sh"
+  sparehold_min_macos_line >> "$notes"
+  echo >> "$notes"
+fi
 
 # Create the tag HERE and push it, instead of letting GitHub create it with
 # the release. A tag GitHub makes exists only there until someone fetches;

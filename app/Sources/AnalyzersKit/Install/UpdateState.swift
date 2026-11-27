@@ -77,6 +77,11 @@ public final class UpdateState {
     /// never fetched. A downloaded app has no clone and can only follow releases.
     public private(set) var hasClone = false
     public private(set) var cloneBranch: String?
+    /// The version the channel would offer and the minimum macOS it declares, when this Mac cannot run it
+    /// (issue #8: a release that needs a newer macOS is never offered here). Both nil when the offer is
+    /// installable, or when nothing was offered.
+    public private(set) var blockedOfferVersion: String?
+    public private(set) var offerMinimumMacOS: String?
     /// What the clone looks like now, for the This Copy screen.
     public private(set) var cloneFacts: CloneFacts?
     /// Whether the clone has uncommitted changes, when it was asked (Beta and This Copy); nil when unknown.
@@ -114,10 +119,16 @@ public final class UpdateState {
 
     /// For `SnapshotRunner --update-state`: sets what the last check answered, so
     /// each state of the version item can be rendered without the network.
-    @_spi(TestSupport) public func preset(latest: String?, reached: Bool? = true) {
+    @_spi(TestSupport) public func preset(latest: String?, reached: Bool? = true, minimumMacOS: String? = nil) {
         self.latest = latest
         reachedGitHub = reached
         checkedAt = Date()
+        if UpdateChecker.macOSCanRun(minimum: minimumMacOS) {
+            offerMinimumMacOS = nil
+        } else {
+            offerMinimumMacOS = minimumMacOS
+            blockedOfferVersion = latest
+        }
         isFixture = true
     }
 
@@ -145,16 +156,19 @@ public final class UpdateState {
 
     /// Something newer than this copy exists on the channel it follows. Notifications and the menu use this.
     /// The Updates screen uses `offersInstall`, which also offers the channel's own version when this copy is past it.
+    /// A version this Mac cannot run (its release declares a newer minimum macOS) is never available here.
     public var isAvailable: Bool {
+        guard offerMinimumMacOS == nil else { return false }
         switch channel {
-        case .releases: latest.map { UpdateChecker.isNewer($0, than: installed) } ?? false
-        case .beta, .thisCopy: channelState?.isUpdate ?? false
+        case .releases: return latest.map { UpdateChecker.isNewer($0, than: installed) } ?? false
+        case .beta, .thisCopy: return channelState?.isUpdate ?? false
         }
     }
 
     /// The selected channel has a version this copy is not. Newer, or the stable or beta version a development
-    /// copy can still install because the person chose that channel.
+    /// copy can still install because the person chose that channel. A version this Mac cannot run is never offered.
     public var offersInstall: Bool {
+        guard offerMinimumMacOS == nil else { return false }
         switch channel {
         case .releases:
             guard latest != nil else { return false }
@@ -208,6 +222,9 @@ public final class UpdateState {
     /// The headline of the status card at the top of Updates, in the shape of the system's Software Update:
     /// "Sparehold is up to date", "Sparehold 2.73.1 Beta is available", the copy's own name for a Dev copy.
     public var statusTitle: String {
+        if let blockedOfferVersion, let offerMinimumMacOS {
+            return "\(Names.app) \(BuildInfo.label(forVersion: blockedOfferVersion)) needs macOS \(offerMinimumMacOS)"
+        }
         if let offered { return "\(Names.app) \(offered.label) is available" }
         if channel == .thisCopy, isAvailable { return "Your clone has newer changes" }
         if offersInstall, channel == .releases, let latest {
@@ -224,6 +241,9 @@ public final class UpdateState {
 
     /// The line under the headline: the installed version, or why a Dev copy has nothing to install, or that GitHub was not reached.
     public var statusDetail: String {
+        if let blockedOfferVersion = blockedOfferVersion, offerMinimumMacOS != nil {
+            return "\(BuildInfo.label(forVersion: blockedOfferVersion)) needs a newer macOS than this Mac runs. Update macOS, then check again."
+        }
         if reachedGitHub == false, latest == nil { return Names.ChannelText.offline }
         if offersInstall, offered == nil, channel != .thisCopy {
             return "You have \(build.versionText)."
@@ -274,6 +294,13 @@ public final class UpdateState {
         let found = await UpdateChecker.latestRelease(force: force)
         if let version = found.version { latest = version }
         reachedGitHub = found.reached
+        // the release's minimum macOS: an offer this Mac cannot run is recorded, never shown as available
+        if UpdateChecker.macOSCanRun(minimum: found.minimum) {
+            offerMinimumMacOS = nil
+        } else {
+            offerMinimumMacOS = found.minimum
+            blockedOfferVersion = found.version
+        }
         await refreshChannel(force: force)
         checkedAt = Date()
         if phase == .checking { phase = .idle }
@@ -309,6 +336,13 @@ public final class UpdateState {
             let feed = await UpdateChecker.betaFeed(force: force)
             let notes = await Self.betaNotes(from: feed, force: force)
             guard channel == asked else { return }
+            // what Beta offers must also be something this Mac can run: the target's own release comment decides
+            if UpdateChecker.macOSCanRun(minimum: feed?.targetMinimum) {
+                offerMinimumMacOS = nil
+            } else {
+                offerMinimumMacOS = feed?.targetMinimum
+                blockedOfferVersion = feed?.target
+            }
             cloneDirty = dirty
             cloneFacts = nil
             // a Dev copy is above every beta of its version by precedence: whether it holds the newest one is asked of GitHub
@@ -330,6 +364,8 @@ public final class UpdateState {
             channelChangelog = nil
             betaNotes = notes
         case .thisCopy:
+            // a rebuild compiles on this Mac, so it runs on it: no minimum to gate
+            offerMinimumMacOS = nil
             let read: (facts: CloneFacts?, changelog: String?) = await Task.detached {
                 guard let clone = provider() else { return (nil, nil) }
                 return (clone.facts(installed: build.commit), clone.changelog)

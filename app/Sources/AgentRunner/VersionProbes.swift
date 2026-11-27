@@ -121,6 +121,32 @@ func probeVersions() async -> Never {
     onRelease.preset(latest: "2.69.2")
     flag("a release copy on the latest release: up to date", onRelease.summary == .upToDate && !onRelease.isAvailable, true)
 
+    print("\n— the macOS gate: a release this Mac cannot run is never offered —")
+    expect("the release comment is read back", UpdateChecker.minimumMacOS(inBody: "Notes here.\n\n<!-- minimum-macos: 27 -->") ?? "none", "27")
+    expect("   with a minor", UpdateChecker.minimumMacOS(inBody: "<!-- minimum-macos: 26.1 -->") ?? "none", "26.1")
+    expect("   a body without one", UpdateChecker.minimumMacOS(inBody: "Plain notes, no comment.") ?? "none", "none")
+    expect("   a nil body", UpdateChecker.minimumMacOS(inBody: nil) ?? "none", "none")
+    expect("   look-alike prose is not a gate", UpdateChecker.minimumMacOS(inBody: "the minimum macOS you should have is 12") ?? "none", "none")
+    let running = ProcessInfo.processInfo.operatingSystemVersion
+    flag("no declared minimum always runs", UpdateChecker.macOSCanRun(minimum: nil), true)
+    flag("   a minimum this Mac's own major", UpdateChecker.macOSCanRun(minimum: "\(running.majorVersion)"), true)
+    flag("   this major at this minor", UpdateChecker.macOSCanRun(minimum: "\(running.majorVersion).\(running.minorVersion)"), true)
+    flag("   a later minor of this major is refused", UpdateChecker.macOSCanRun(minimum: "\(running.majorVersion).\(running.minorVersion + 1)"), false)
+    flag("   the next major is refused", UpdateChecker.macOSCanRun(minimum: "\(running.majorVersion + 1)"), false)
+    flag("   the major before is fine", UpdateChecker.macOSCanRun(minimum: "\(max(running.majorVersion - 1, 0) == 0 ? 1 : running.majorVersion - 1)"), true)
+    let gated = UpdateState(build: BuildInfo(release: "3.5.0", commitsAfter: 0, commit: commit))
+    gated.preset(latest: "3.6.0", minimumMacOS: "\(running.majorVersion + 1)")
+    flag("a release needing a newer macOS is not available", gated.isAvailable, false)
+    flag("   and never offered for install", gated.offersInstall, false)
+    expect("   the menu footer stays quiet", gated.availableTitle ?? "none", "none")
+    expect("   the headline names the macOS it needs", gated.statusTitle, "\(Names.app) 3.6.0 needs macOS \(running.majorVersion + 1)")
+    expect("   the detail says what to do", gated.statusDetail, "3.6.0 needs a newer macOS than this Mac runs. Update macOS, then check again.")
+    flag("   the notification channel reads it as up to date, never an update", gated.summary == .upToDate, true)
+    let ungated = UpdateState(build: BuildInfo(release: "3.5.0", commitsAfter: 0, commit: commit))
+    ungated.preset(latest: "3.6.0", minimumMacOS: "\(running.majorVersion)")
+    flag("a release this Mac can run is offered as usual", ungated.isAvailable && ungated.offersInstall, true)
+    expect("   its headline", ungated.statusTitle, "\(Names.app) 3.6.0 is available")
+
     print("\n— Beta: the newest pre-release —")
     // GitHub's list, as it answers: pre-releases and releases together, newest first, plus what is not either
     let listing = """
