@@ -9,6 +9,7 @@ GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
 ## v3.6.0 — What Led Up to the Freeze
+<!-- wn: released=2026-11-27 -->
 
 A freeze leaves records scattered where nobody reads them together. 3.6.0 reads them together — and makes sure the next update you're offered is one this Mac can actually run.
 
