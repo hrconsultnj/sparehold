@@ -134,6 +134,9 @@
 # appends one memory-sample line per interval to reports/memory/flight-recorder.tsv
 # (a size-capped ring) so the stretch before a freeze can be reconstructed
 # afterwards. The app's Settings own these keys; they are re-read every tick.
+#GUARD_HEADROOM=1               # 1 = the guard overwrites reports/memory/headroom.status
+                                #     every tick (disk, swap, pressure, agent sessions) so an
+                                #     agent can check it before spawning more work; 0 removes it
 #GUARD_FLIGHT_RECORDER=0        # 1 = record (0 = off, the default)
 #GUARD_FLIGHT_INTERVAL=60       # seconds between samples, slow rate
 #GUARD_FLIGHT_FAST_INTERVAL=10  # fast rate while pressure >= 2 or swap grows

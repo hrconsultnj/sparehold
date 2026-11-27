@@ -12,6 +12,13 @@ import UIComponents
 /// Copy Evidence, Show Source, Past Runs and Stop ride the secondary rank.
 struct AgentDiagnosticView: View {
 
+    /// Example rows for `SnapshotRunner`; nil in the app.
+    var fixture: DiagnosticRun?
+    /// `SnapshotRunner`: past-run entries shown without a run on disk.
+    var fixturePastRuns = 0
+    /// `SnapshotRunner`: the screen as it is with nothing on disk and no restart to suggest.
+    var fixtureNoneOn = false
+
     enum Scope: String, CaseIterable, Identifiable, Sendable {
         case timeline, jobs, setup, telemetry, findings, decisions
         var id: String { rawValue }
@@ -55,7 +62,7 @@ struct AgentDiagnosticView: View {
     @State private var scope: Scope = .timeline
 
     private var tabs: [ScopeTabItem<Scope>] {
-        let run = model.parsed
+        let run = fixture ?? model.parsed
         func count(_ number: Int?) -> Int? { model.loaded ? number : nil }
         return Scope.allCases.map { tab in
             ScopeTabItem(value: tab, title: tab.title, symbol: tab.symbol, count: count(tab.count(in: run)))
@@ -68,13 +75,19 @@ struct AgentDiagnosticView: View {
             .scopeTabsToolbar(screen: "agentDiagnostic", items: tabs, selection: $scope)
             .toolbar { toolbar }
             .task {
+                guard fixture == nil, !fixtureNoneOn else { return }
                 model.adopt(from: store)
                 await model.reload()
             }
     }
 
     @ViewBuilder private var content: some View {
-        if model.isRunning {
+        if let fixture {
+            tabContent(fixture)
+        } else if fixtureNoneOn {
+            EmptyState("Nothing Has Run Yet", systemImage: "stethoscope",
+                       description: Text("The diagnostic reads crash reports, the unified log, launchd jobs and the Memory Guard's record. It changes nothing."))
+        } else if model.isRunning {
             LoadingState("Reading the hour around the event…", detail: "The unified log's query is bounded by the window, but it can take a minute or two.") {
                 Button("Stop", action: model.stop)
             }
@@ -113,7 +126,7 @@ struct AgentDiagnosticView: View {
     }
 
     private var subtitle: String {
-        guard let run = model.parsed else { return "Reads the records; changes nothing." }
+        guard let run = fixture ?? model.parsed else { return "Reads the records; changes nothing." }
         let confirmed = run.timeline.count
         return "\(Names.Screen.agentDiagnostic) — \(confirmed) timeline row\(confirmed == 1 ? "" : "s") in the newest run."
     }
@@ -146,7 +159,7 @@ struct AgentDiagnosticView: View {
             } label: {
                 Label("Copy Evidence", systemImage: "doc.on.doc")
             }
-            .disabled(model.parsed == nil)
+            .disabled((fixture ?? model.parsed) == nil)
             .help("The redacted markdown package: verdict, timeline, findings, decisions. Nothing leaves this Mac but what you paste.")
 
             Button {
@@ -154,7 +167,7 @@ struct AgentDiagnosticView: View {
             } label: {
                 Label("Show Source", systemImage: "doc.text")
             }
-            .disabled(model.viewing == nil)
+            .disabled(fixture == nil && model.viewing == nil)
             .help("The run's own log, as the engine wrote it.")
         }
         .toolbarRank(.primary)
@@ -167,7 +180,7 @@ struct AgentDiagnosticView: View {
             } label: {
                 Label("Past Runs", systemImage: "clock.arrow.circlepath")
             }
-            .disabled(model.runs.isEmpty)
+            .disabled(model.runs.isEmpty && fixturePastRuns == 0 && fixture == nil)
             .help("Runs already on disk, newest first.")
 
             if model.isRunning {
@@ -185,7 +198,7 @@ struct AgentDiagnosticView: View {
     // MARK: actions
 
     private func copyEvidence() {
-        guard let run = model.parsed else { return }
+        guard let run = fixture ?? model.parsed else { return }
         let redactor = EvidenceRedactor()
         let findings = allFindings(run)
         let text = EvidencePackage.build(
@@ -202,7 +215,7 @@ struct AgentDiagnosticView: View {
     }
 
     private func showSource() {
-        guard let viewing = model.viewing else { return }
+        guard let viewing = model.viewing ?? model.runs.first else { return }
         navigator.push(.overview(.raw(.file(viewing.directory.appending(path: "run.log"), fromTop: true))))
     }
 

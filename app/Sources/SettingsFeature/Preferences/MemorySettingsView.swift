@@ -79,6 +79,15 @@ struct MemorySettingsView: View {
                 }
             }
 
+            Section("Headroom File") {
+                VStack(alignment: .leading, spacing: Tokens.Space.xxs) {
+                    Toggle("Tell agents what the Mac can take on", isOn: $config.memory.headroomFile)
+                    Text("While on, the guard overwrites one small file (free disk, swap, pressure, running agent sessions) every tick, so an agent can check it before spawning more work. It keeps no history; turning it off removes the file.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Flight Recorder") {
                 VStack(alignment: .leading, spacing: Tokens.Space.xxs) {
                     Toggle("Record memory history", isOn: $config.memory.flightRecorder)

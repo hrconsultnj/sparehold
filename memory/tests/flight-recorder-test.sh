@@ -39,12 +39,12 @@ GUARD="$ROOT/memory/memory-guard.sh"
 # the recorder's functions, read from the guard script (single source of truth).
 # The pattern goes into a variable first: inside $( ) on bash 3.2 a `{` in a
 # double-quoted word is mis-parsed, and the range pattern needs it.
-for fn in flight_read_knobs flight_swap_mb flight_record; do
+for fn in flight_read_knobs flight_swap_mb flight_vm_mb flight_record; do
   pattern="/^${fn}() {/,/^}/p"
   eval "$(sed -n "$pattern" "$GUARD")"
 done
 if [[ -z "$(declare -f flight_record 2>/dev/null)" || -z "$(declare -f flight_read_knobs 2>/dev/null)" \
-      || -z "$(declare -f flight_swap_mb 2>/dev/null)" ]]; then
+      || -z "$(declare -f flight_swap_mb 2>/dev/null)" || -z "$(declare -f flight_vm_mb 2>/dev/null)" ]]; then
   echo "FAIL  could not read the recorder functions from memory-guard.sh"
   exit 1
 fi

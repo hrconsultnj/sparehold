@@ -517,10 +517,12 @@ do_telemetry() {
   [[ -d "${SPAREHOLD_USER_ROOT}/reports/memory" ]] && dumps="$(find "${SPAREHOLD_USER_ROOT}/reports/memory" -name 'guard-critical-*.log' 2>/dev/null | grep -c .)"
   ring=absent
   [[ -r "$RING_FILE" ]] && ring=present
+  headroom=absent
+  [[ -r "${SPAREHOLD_USER_ROOT}/reports/memory/headroom.status" ]] && headroom=present
   sessions=0
   [[ -d "${HOME}/.claude/projects" ]] && sessions="$(find "${HOME}/.claude/projects" -name '*.jsonl' 2>/dev/null | grep -c .)"
   printf '%s\n' \
-    "host	pressure/spike/kill lines in guard.log: ${guard_lines}	~5 MB rotation	pid	$( [[ "$ring" = present ]] && echo "none — the flight recorder is on" || echo "wired/swap/free-disk over time: the flight recorder is the answer (off right now)" )" \
+    "host	guard.log lines: ${guard_lines}; headroom file: ${headroom}	~5 MB rotation	pid	$( [[ "$ring" = present ]] && echo "none — the flight recorder is on" || echo "wired/swap/free-disk over time: the flight recorder is the answer (off right now); the headroom file answers what the Mac can take on now" )" \
     "agent	session files on disk: ${sessions}	each tool's own policy	none across tools	a cross-tool correlation key does not exist" \
     "process	forensic dumps at critical pressure: ${dumps}	with the reports	pid	only the critical moment, never a series" \
     "workflow	rule-outcomes.jsonl (would-have rows)	$([[ -f "${SPAREHOLD_USER_ROOT}/reports/memory/rule-outcomes.jsonl" ]] && echo kept || echo absent)	rule id	nothing links a rule row to an agent session" \

@@ -92,7 +92,14 @@ FLIGHT_RECORDER="${GUARD_FLIGHT_RECORDER:-0}"              # 1 = record (0 = off
 FLIGHT_INTERVAL="${GUARD_FLIGHT_INTERVAL:-60}"             # seconds between samples, slow rate
 FLIGHT_FAST_INTERVAL="${GUARD_FLIGHT_FAST_INTERVAL:-10}"   # fast rate while pressure >= 2 or swap grows
 FLIGHT_MAX_BYTES="${GUARD_FLIGHT_MAX_BYTES:-1048576}"      # 1 MiB ring cap
-RING_FILE="${LOG_DIR}/flight-recorder.tsv"                 # the only file this feature writes
+RING_FILE="${LOG_DIR}/flight-recorder.tsv"                 # the only file the recorder writes
+# The headroom file: the present state an agent can check before spawning more
+# work (the Agent Diagnostic's "during" half). Default ON — it records nothing
+# new (the Monitor shows the same figures) and keeps no history; one small
+# file, atomically replaced every tick. GUARD_HEADROOM=0 stops the writes and
+# removes the file: an agent must never read a stale "fine" as current.
+HEADROOM="${GUARD_HEADROOM:-1}"
+HEADROOM_FILE="${LOG_DIR}/headroom.status"
 RING_HEADER='# sparehold flight recorder v1: iso epoch disk_free_gb swap_used_mb swap_files wired_mb compressed_mb pressure procs top5'
 # the copy the app writes (the data root's, the one sparehold_apply_paths prefers)
 CONFIG_LOCAL="${SPAREHOLD_USER_ROOT}/config.local.sh"
@@ -162,14 +169,19 @@ flight_read_knobs() {
     /^[[:space:]]*GUARD_FLIGHT_INTERVAL=/     { flightval(); slow = v }
     /^[[:space:]]*GUARD_FLIGHT_FAST_INTERVAL=/{ flightval(); fast = v }
     /^[[:space:]]*GUARD_FLIGHT_MAX_BYTES=/    { flightval(); cap = v }
-    END { printf "%s\t%s\t%s\t%s\n", rec, slow, fast, cap }
+    /^[[:space:]]*GUARD_HEADROOM=/            { flightval(); hr = v }
+    # "|", not a tab: empty leading fields must survive the read, and tab is
+    # IFS whitespace — a config carrying only GUARD_HEADROOM would collapse
+    # the four empties and land the value in a recorder knob
+    END { printf "%s|%s|%s|%s|%s\n", rec, slow, fast, cap, hr }
   ' "$CONFIG_LOCAL" 2>/dev/null)"
-  local rec slow fast cap
-  IFS=$'\t' read -r rec slow fast cap <<<"$line"
+  local rec slow fast cap hr
+  IFS='|' read -r rec slow fast cap hr <<<"$line"
   case "$rec" in 0|1) FLIGHT_RECORDER="$rec" ;; esac
   case "$slow" in ''|*[!0-9]*) ;; *) FLIGHT_INTERVAL="$slow" ;; esac
   case "$fast" in ''|*[!0-9]*) ;; *) FLIGHT_FAST_INTERVAL="$fast" ;; esac
   case "$cap" in ''|*[!0-9]*) ;; *) FLIGHT_MAX_BYTES="$cap" ;; esac
+  case "$hr" in 0|1) HEADROOM="$hr" ;; esac
   return 0
 }
 
@@ -178,6 +190,20 @@ flight_swap_mb() {
   sysctl -n vm.swapusage 2>/dev/null | awk '
     $4 == "used" { v = $6; sub(/M$/, "", v); printf "%d", v; seen = 1 }
     END { if (!seen) printf "0" }'
+}
+
+# wired and compressed memory, whole MB, one vm_stat read ("wired comp") —
+# the shared read behind the recorder's sample and the headroom file, so the
+# two never drift apart on what the figures mean
+flight_vm_mb() {
+  vm_stat 2>/dev/null | awk '
+    /page size of/   { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) page = $i }
+    /^Pages wired down/ { v = $NF; sub(/\./, "", v); wired = v }
+    /^Pages (occupied|stored) by compressor/ { v = $NF; sub(/\./, "", v); comp = v }
+    END {
+      if (page == "") page = 16384
+      printf "%d %d", (wired == "" ? 0 : wired) * page / 1048576, (comp == "" ? 0 : comp) * page / 1048576
+    }'
 }
 
 # $1 = pressure level, $2 = now (epoch), $3 = the tick's ps table (reused —
@@ -208,14 +234,7 @@ flight_record() {
   local swap_files=0 sf
   for sf in /System/Volumes/VM/swapfile*; do [[ -e "$sf" ]] && swap_files=$((swap_files + 1)); done
   local vm_parts wired_mb=0 comp_mb=0
-  vm_parts="$(vm_stat 2>/dev/null | awk '
-    /page size of/   { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) page = $i }
-    /^Pages wired down/ { v = $NF; sub(/\./, "", v); wired = v }
-    /^Pages (occupied|stored) by compressor/ { v = $NF; sub(/\./, "", v); comp = v }
-    END {
-      if (page == "") page = 16384
-      printf "%d %d", (wired == "" ? 0 : wired) * page / 1048576, (comp == "" ? 0 : comp) * page / 1048576
-    }')"
+  vm_parts="$(flight_vm_mb)"
   wired_mb="${vm_parts%% *}"; comp_mb="${vm_parts#* }"
   [[ -n "$wired_mb" ]] || wired_mb=0
   [[ -n "$comp_mb" ]] || comp_mb=0
@@ -394,6 +413,57 @@ if [[ -f "$LOG_FILE" && $(stat -f '%z' "$LOG_FILE" 2>/dev/null || echo 0) -gt 52
   mv "$LOG_FILE" "${LOG_FILE}.1"
 fi
 
+# ---------- headroom file: the present state an agent can check (default on) ----------
+# One atomically-replaced file per tick. The figures are the same stock reads
+# the recorder takes; the session count is the live-session exemption's ROOTS
+# counted from the tick's own process table (no extra ps). Nothing here has
+# history — the Monitor shows the same figures, and Sparehold never reads this
+# file back for any decision: agents check it, the agent decides.
+headroom_write() {
+  flight_read_knobs
+  if [[ "$HEADROOM" != "1" ]]; then
+    rm -f "${HEADROOM_FILE}.tmp" "$HEADROOM_FILE" 2>/dev/null   # a switched-off guard must not leave a stale "fine"
+    return 0
+  fi
+  local level="${1:-1}" now="${2:-0}" ptable="${3:-}"
+  local swap_mb swap_files=0 sf wired_mb=0 comp_mb=0 disk_gb sessions=0 roots="" iso
+  swap_mb="$(flight_swap_mb)"; [[ -n "$swap_mb" ]] || swap_mb=0
+  for sf in /System/Volumes/VM/swapfile*; do [[ -e "$sf" ]] && swap_files=$((swap_files + 1)); done
+  local vm
+  vm="$(flight_vm_mb)"
+  wired_mb="${vm%% *}"; comp_mb="${vm#* }"
+  [[ -n "$wired_mb" ]] || wired_mb=0
+  [[ -n "$comp_mb" ]] || comp_mb=0
+  disk_gb="$(df -k / 2>/dev/null | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }')"
+  [[ -n "$disk_gb" ]] || disk_gb=0
+  if [[ "$LIVE_SESSIONS_OK" -eq 1 ]]; then
+    # the tick's table is pid rss args; the session filter reads pid args —
+    # strip both leading numbers and put the pid back, no extra ps
+    if declare -F _live_session_filter >/dev/null 2>&1; then
+      roots="$(printf '%s\n' "$ptable" | awk '{ pid = $1; sub(/^[ \t]*[0-9]+[ \t]+/, ""); sub(/^[ \t]*[0-9]+[ \t]+/, ""); print pid " " $0 }' | _live_session_filter | tr '\n' ' ')"
+    else
+      roots="$(live_session_roots)"
+    fi
+    sessions="$(printf '%s' "$roots" | awk '{ print NF }')"
+  fi
+  iso="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  [[ ${#iso} -eq 24 ]] && iso="${iso:0:22}:${iso:22}"
+  # the whole file lands as one rename: an agent never reads half a file
+  printf '%s\n' \
+    "# sparehold headroom v1 — what this Mac can take on right now; check this before spawning more work" \
+    "disk_free_gb: $disk_gb" \
+    "swap_used_mb: $swap_mb" \
+    "swap_files: $swap_files" \
+    "wired_mb: $wired_mb" \
+    "compressed_mb: $comp_mb" \
+    "pressure: $level" \
+    "procs: $(printf '%s\n' "$ptable" | awk 'END { print NR }')" \
+    "agent_sessions: $sessions" \
+    "updated: $iso" \
+    > "${HEADROOM_FILE}.tmp" 2>/dev/null || return 0
+  mv "${HEADROOM_FILE}.tmp" "$HEADROOM_FILE" 2>/dev/null || return 0
+}
+
 tick() {
   read_fallback
   [[ -e "$PAUSE_FLAG" || "$FALLBACK_PAUSE" == 1 ]] && return 0
@@ -527,6 +597,9 @@ tick() {
   #        the pause check at the top of the tick, like the rest. Reuses the
   #        tick's ps table — it spawns no ps of its own.
   flight_record "$level" "$now" "$ptable"
+
+  # --- 6. the headroom file: the present state, atomically replaced (default on) ---
+  headroom_write "$level" "$now" "$ptable"
 }
 
 while :; do

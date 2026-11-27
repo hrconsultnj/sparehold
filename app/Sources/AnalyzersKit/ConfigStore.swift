@@ -18,6 +18,10 @@ public struct MemoryTunables: Equatable, Sendable {
     public var guardIntervalSeconds = 15
     /// GUARD_DEV_SWEEP_SECS: seconds between the guard's idle-developer-tools passes (0 = never). Read only.
     public var devSweepSeconds = 120
+    /// GUARD_HEADROOM: the guard writes one small "what this Mac can take on" file
+    /// every tick for agents to check before spawning more work. Default on — it
+    /// records nothing new and keeps no history; Sparehold never reads it back.
+    public var headroomFile = true
     /// GUARD_FLIGHT_RECORDER: the guard's flight recorder appends a memory sample
     /// to reports/memory/flight-recorder.tsv so a freeze can be reconstructed
     /// afterwards (Agent Diagnostic). Off by default; the Memory pane owns the switch.
@@ -194,6 +198,7 @@ public final class ConfigStore {
         }
 
         if let v = value("GUARD_HARD_CAP_MB").flatMap({ Int($0) }) { memory.hardCapMB = v }
+        if let v = value("GUARD_HEADROOM") { memory.headroomFile = v == "1" }
         if let v = value("GUARD_FLIGHT_RECORDER") { memory.flightRecorder = v == "1" }
         if let v = value("GUARD_FLIGHT_INTERVAL").flatMap({ Int($0) }), v >= 0 { memory.flightIntervalSeconds = v }
         if let v = value("GUARD_FLIGHT_FAST_INTERVAL").flatMap({ Int($0) }), v >= 0 { memory.flightFastIntervalSeconds = v }
@@ -285,6 +290,7 @@ public final class ConfigStore {
         block += "GUARD_SPIKE_MIN_MB=\(memory.spikeMinMB)\n"
         block += "GUARD_CPU_HOG_PCT=\(memory.cpuHogPct)\n"
         block += "GUARD_CPU_HOG_TICKS=\(memory.cpuHogTicks)\n"
+        block += "GUARD_HEADROOM=\(memory.headroomFile ? 1 : 0)\n"
         block += "GUARD_FLIGHT_RECORDER=\(memory.flightRecorder ? 1 : 0)\n"
         block += "GUARD_FLIGHT_INTERVAL=\(memory.flightIntervalSeconds)\n"
         block += "GUARD_FLIGHT_FAST_INTERVAL=\(memory.flightFastIntervalSeconds)\n"

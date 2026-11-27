@@ -9,6 +9,8 @@ enum SystemRoute: Hashable, Codable, Sendable {
     case reportSection(report: String, index: Int)
     /// The Agent Diagnostic with a tab pre-selected ("timeline" … "decisions").
     case diagnostic(focus: String)
+    /// A SnapshotRunner render of the diagnostic screen from its fixtures.
+    case diagnosticFixture(String)
 }
 
 /// Network, Login & Startup Items and the Agent Diagnostic — the Mac's live
@@ -34,6 +36,9 @@ enum SystemGroup {
             "network": .main(Location(network)),
             "loginitems": .main(Location(loginItems)),
             "agentDiagnostic": .main(Location(agentDiagnostic)),
+            "agentDiagnostic:fixture": .main(Location(agentDiagnostic, path: [.system(.diagnosticFixture("agentDiagnostic"))])),
+            "agentDiagnostic:fixture:many": .main(Location(agentDiagnostic, path: [.system(.diagnosticFixture("agentDiagnostic-many"))])),
+            "agentDiagnostic:empty:none": .main(Location(agentDiagnostic, path: [.system(.diagnosticFixture("agentDiagnostic-none"))])),
             "log:loginItems": .main(Location(loginItems)),
             // the startup-changes history is the Changes scope of Login & Startup Items
             "log:persistence": .mainWithIntent(Location(loginItems),
@@ -71,6 +76,13 @@ enum SystemGroup {
         switch route {
         case .reportSection(let report, let index): ReportSectionScreen(report: report, index: index)
         case .diagnostic: AgentDiagnosticView()
+        case .diagnosticFixture(let name):
+            switch name {
+            case "agentDiagnostic": AgentDiagnosticView(fixture: AgentDiagnosticFixtures.run())
+            case "agentDiagnostic-many": AgentDiagnosticView(fixture: AgentDiagnosticFixtures.run(), fixturePastRuns: 5)
+            case "agentDiagnostic-none": AgentDiagnosticView(fixtureNoneOn: true)
+            default: AgentDiagnosticView()
+            }
         }
     }
 }
