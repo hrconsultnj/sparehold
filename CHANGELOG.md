@@ -10,6 +10,12 @@ Older entries below keep the name the app had when they shipped.
 
 ## Next
 
+Working on development right now — beta builds carry these as they land:
+
+- After a freeze, the Agent Diagnostic rebuilds the hour around the event from the records that already exist — crash reports (by their header time, not the file name's), the purge lines, boots, the guard's record, agent sessions and every launchd job with the line that trips it — graded confirmed, plausible or unknown, and it never changes anything. <!-- wn: open=agentDiagnostic icon=stethoscope title="The Agent Diagnostic" -->
+- An update this Mac cannot run is never offered: every release carries its minimum macOS, and an offer past it says what it needs instead of pretending to be installable. <!-- wn: open=update icon=arrow.down.circle title="Updates That Can Actually Run" -->
+- The Memory Guard can keep a flight recorder: a small ring of wired, swap, free-disk and pressure samples, off by default and capped at one megabyte, that writes straight to disk even when the machine is crawling. <!-- wn: open=memory icon=record.circle title="The Flight Recorder" -->
+
 ## v3.5.0 — Everything You See, You Can Act On
 <!-- wn: released=2026-11-22 -->
 

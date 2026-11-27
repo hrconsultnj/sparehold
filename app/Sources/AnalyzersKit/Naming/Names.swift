@@ -67,6 +67,7 @@ public enum Names {
         public static let loginItems = "Login & Startup Items"
         public static let network = "Network"
         public static let askAgent = "The Ask Agent"
+        public static let agentDiagnostic = "The Agent Diagnostic"
         public static let whereWritten = "Where Everything Is Written"
         public static let editByHand = "Settings You Can Edit by Hand"
         public static let healthReport = "Mac Health Report"
@@ -624,6 +625,15 @@ public enum Names {
     public enum NetworkScope {
         public static let snapshot = "Snapshot"
         public static let history = "History"
+    }
+
+    public enum DiagnosticScope {
+        public static let timeline = "Timeline"
+        public static let jobs = "Jobs Audit"
+        public static let setup = "Agent Setup"
+        public static let telemetry = "Telemetry"
+        public static let findings = "Findings"
+        public static let decisions = "Decisions"
     }
 
     // MARK: - table column titles

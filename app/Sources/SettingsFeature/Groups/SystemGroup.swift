@@ -7,27 +7,33 @@ enum SystemRoute: Hashable, Codable, Sendable {
     /// (a `ReportDocument`'s id) and the section's index. The screen reads the file
     /// again, the same read and split the reader did, so it stands on its own.
     case reportSection(report: String, index: Int)
+    /// The Agent Diagnostic with a tab pre-selected ("timeline" … "decisions").
+    case diagnostic(focus: String)
 }
 
-/// Network and Login & Startup Items — the Mac's live parts: what it talks to,
-/// what starts with it. Reports lives in the History group: it is the analyzers'
-/// written record over time, not a live part.
+/// Network, Login & Startup Items and the Agent Diagnostic — the Mac's live
+/// parts: what it talks to, what starts with it, and what led up to a freeze.
+/// Reports lives in the History group: it is the analyzers' written record
+/// over time, not a live part.
 @MainActor
 enum SystemGroup {
 
     static let network = SectionID("network")
     static let loginItems = SectionID("loginItems")
+    static let agentDiagnostic = SectionID("agentDiagnostic")
 
     static let group = SidebarGroup(
         title: Names.Group.system,
         rows: [
             SidebarRow(network, Names.Screen.network, symbol: "network", tint: .orange),
             SidebarRow(loginItems, Names.Screen.loginItems, symbol: "person.crop.circle.badge.questionmark", tint: .orange),
+            SidebarRow(agentDiagnostic, Names.Screen.agentDiagnostic, symbol: "stethoscope", tint: .orange),
         ],
         root: screen,
         aliases: [
             "network": .main(Location(network)),
             "loginitems": .main(Location(loginItems)),
+            "agentDiagnostic": .main(Location(agentDiagnostic)),
             "log:loginItems": .main(Location(loginItems)),
             // the startup-changes history is the Changes scope of Login & Startup Items
             "log:persistence": .mainWithIntent(Location(loginItems),
@@ -43,7 +49,7 @@ enum SystemGroup {
     /// Pure: the screen reads the data and applies the request when it has it.
     private static func resolveDynamic(_ target: String) -> Resolution? {
         let sections: [(prefix: String, section: SectionID)] = [
-            ("startup:", loginItems), ("network:", network),
+            ("startup:", loginItems), ("network:", network), ("agentDiagnostic:", agentDiagnostic),
         ]
         for (prefix, section) in sections where target.hasPrefix(prefix) {
             return .mainWithIntent(Location(section),
@@ -56,6 +62,7 @@ enum SystemGroup {
         switch section {
         case network: NetworkView()
         case loginItems: LoginItemsView()
+        case agentDiagnostic: AgentDiagnosticView()
         default: EmptyView()
         }
     }
@@ -63,6 +70,7 @@ enum SystemGroup {
     @ViewBuilder static func destination(for route: SystemRoute) -> some View {
         switch route {
         case .reportSection(let report, let index): ReportSectionScreen(report: report, index: index)
+        case .diagnostic: AgentDiagnosticView()
         }
     }
 }
