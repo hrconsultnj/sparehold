@@ -28,6 +28,8 @@ public enum AnalyzersPaths {
     public static let memoryReports = userRoot.appending(path: "reports/memory")
     /// The Agent Diagnostic's runs: one folder per day, one timestamped run inside it.
     public static let agentDiagnosticReports = userRoot.appending(path: "reports/agent-diagnostic")
+    /// The agent inventory the sweep writes (the Ask agent's readAgents capability reads it).
+    public static let inventoryURL = userRoot.appending(path: "reports/agents/inventory.json")
     public static let storageReports = userRoot.appending(path: "reports/storage")
 
     /// Where the APP WRITES its own records — never the bundle. Whichever copy

@@ -51,6 +51,8 @@
 #   ./storage/guardian.sh                          # preview (dry run)
 #   ./storage/guardian.sh --apply --only-paths <file>   # act ONLY on the reviewed list
 #   ./storage/guardian.sh --worktree-idle-days N --parked-days N --reports-days N --roots "dir1 dir2"
+#   (G4's dated-run walk covers memory/, storage/ and agent-diagnostic/ — a
+#   new engine domain's dated runs age out with the same knob)
 #
 # Log-line contract with the app's GuardianReview parser (AnalyzersKit):
 #   banner:  guardian.sh | mode=guardian idle=N parked=N reports=N | DRY RUN|APPLY | <date>
@@ -646,7 +648,7 @@ apply_retention() {  # <dir> <kind-note> <age limit in days>
 }
 
 group "G4. Sparehold's own reports past their age (parked>${PARKED_DAYS}d, runs>${REPORTS_DAYS}d)"
-for d in "$REPORTS_ROOT/memory"/*/ "$REPORTS_ROOT/storage"/*/; do
+for d in "$REPORTS_ROOT/memory"/*/ "$REPORTS_ROOT/storage"/*/ "$REPORTS_ROOT/agent-diagnostic"/*/; do
   case "$d" in */parked-worktrees/*) continue ;; esac
   d="${d%/}"
   if [[ "$DRY_RUN" -eq 1 ]]; then offer_retention "$d" "report run" "$REPORTS_DAYS"; else apply_retention "$d" "report run" "$REPORTS_DAYS"; fi

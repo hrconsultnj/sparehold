@@ -44,6 +44,8 @@ public struct AgentTools: Sendable {
         case scanStorage
         case scanMemory
         case scanNetwork
+        case scanAgents
+        case readAgentInventory
         case readReport
         case proposeCleanup
         case runApprovedCleanup
@@ -54,6 +56,7 @@ public struct AgentTools: Sendable {
         var requiredCapability: String {
             switch self {
             case .scanStorage, .scanMemory, .scanNetwork: "runScans"
+            case .scanAgents, .readAgentInventory: "readAgents"
             case .readReport: "readReports"
             case .proposeCleanup: "proposeCleanups"
             case .runApprovedCleanup: "startApprovedCleans"
@@ -66,6 +69,8 @@ public struct AgentTools: Sendable {
             case .scanStorage: "scanStorage"
             case .scanMemory: "scanMemory"
             case .scanNetwork: "scanNetwork"
+            case .scanAgents: "scanAgents"
+            case .readAgentInventory: "readAgentInventory"
             case .readReport: "readReport"
             case .proposeCleanup: "proposeCleanup"
             case .runApprovedCleanup: "runApprovedCleanup"
@@ -83,6 +88,10 @@ public struct AgentTools: Sendable {
                 "scanMemory — run the read-only memory analyzer now (a tracked scan; nothing is changed). {}"
             case .scanNetwork:
                 "scanNetwork — take the read-only network snapshot (a tracked scan; nothing is changed). {}"
+            case .scanAgents:
+                "scanAgents — build the agent inventory now: installed coding-agent CLIs, live sessions and their worktrees, the headroom the guard keeps (a tracked read-only scan; nothing is changed). {}"
+            case .readAgentInventory:
+                #"readAgentInventory — read the latest agent inventory: installed agents, live sessions, worktrees and their sizes, the Mac's headroom. Answers "what is running?" and "why is my disk full?" from measured figures. {}"#
             case .readReport:
                 #"readReport — read the newest saved scan report. {"kind": "storage" | "memory"}"#
             case .proposeCleanup:
@@ -120,6 +129,10 @@ public struct AgentTools: Sendable {
             return await runScan(.memoryReport)
         case .scanNetwork:
             return await runScan(.networkSnapshot)
+        case .scanAgents:
+            return await runScan(.agentSweep)
+        case .readAgentInventory:
+            return await readAgentInventory()
         case .readReport:
             return await readReport(kind: fields["kind"] ?? "storage")
         case .proposeCleanup:
@@ -137,6 +150,8 @@ public struct AgentTools: Sendable {
         switch tool {
         case .scanStorage, .scanMemory, .scanNetwork:
             return "Refused: the 'Run scans' capability is switched off (\(screen)), so no scan was run. Answer from the reports that already exist, or tell the person they can switch scans on there."
+        case .scanAgents, .readAgentInventory:
+            return "Refused: the 'See my coding agents' capability is switched off (\(screen)), so no inventory was read or built. Tell the person they can switch it on there."
         case .readReport:
             return "Refused: the 'Read my reports' capability is switched off (\(screen)), so no report was read. Tell the person they can switch it on there."
         case .proposeCleanup:
@@ -182,6 +197,29 @@ public struct AgentTools: Sendable {
         // so the person can open the whole report themselves.
         let excerpt = String(text.prefix(Self.reportExcerptLimit))
         return "Newest \(kind) report (\(AnalyzersPaths.displayPath(newest))):\n\n\(excerpt)\n\n(excerpt; the full report is on this Mac.)"
+    }
+
+    /// The latest agent inventory, as an excerpt with its figures named. Reading
+    /// a file, never a process — the sweep already wrote it.
+    @MainActor
+    private func readAgentInventory() async -> String {
+        guard let inventory = AgentInventoryReader.load(url: AnalyzersPaths.inventoryURL) else {
+            return "No agent inventory has been written yet. Call scanAgents first, then read what it wrote."
+        }
+        var lines: [String] = []
+        lines.append("Agents installed: \(inventory.agents.map(\.name).joined(separator: ", "))")
+        lines.append("Live sessions: \(inventory.sessionCount)\(inventory.sessions.isEmpty ? "" : " — \(inventory.sessions.prefix(3).map(\.command).joined(separator: " | "))")")
+        for worktree in inventory.worktrees.sorted(by: { $0.kb > $1.kb }).prefix(8) {
+            lines.append("Worktree \(AnalyzersPaths.displayPath(URL(fileURLWithPath: worktree.path))) (\(worktree.branch), \(worktree.kb / 1024) MB, \(worktree.mergedToMain == true ? "merged to main" : worktree.mergedToMain == false ? "not merged" : "merge state unknown"))")
+        }
+        if let headroom = inventory.headroom {
+            lines.append("Headroom (\(headroom.stale ? "STALE — the guard has not ticked recently" : "current"): disk free \(headroom.diskFreeGB.map { String(format: "%.1f", $0) } ?? "?") GB, swap \(headroom.swapUsedMB ?? 0) MB, pressure \(headroom.pressure ?? 0))")
+        } else {
+            lines.append("Headroom: the Memory Guard's headroom file is not present, so what this Mac can take on right now is unknown.")
+        }
+        let text = lines.joined(separator: "\n")
+        let excerpt = String(text.prefix(Self.reportExcerptLimit))
+        return "Agent inventory (\(AgentInventoryReader.age(inventory))):\n\n\(excerpt)\n\n(excerpt; the full inventory is at \(AnalyzersPaths.displayPath(AnalyzersPaths.inventoryURL)).)"
     }
 
     // MARK: - proposeCleanup (preview only)

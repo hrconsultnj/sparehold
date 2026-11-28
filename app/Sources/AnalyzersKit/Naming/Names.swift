@@ -725,6 +725,7 @@ public enum Names {
         case .guardian: Screen.guardian
         case .networkSnapshot: Screen.network
         case .agentDiagnostic: Screen.agentDiagnostic
+        case .agentSweep: Screen.agentDiagnostic
         case .memoryReport, .storageReport: Screen.reports
         case .installAgents, .uninstallAgents, .sudoersInstall: Screen.setup
         }

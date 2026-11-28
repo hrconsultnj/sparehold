@@ -40,6 +40,11 @@ extension AgentCapability {
             summary: "Runs the read-only analyzers (storage, memory, network). Scans never change anything.",
             defaultOn: true),
         AgentCapability(
+            id: "readAgents",
+            title: "See my coding agents",
+            summary: "Answers questions about the agents on this Mac — installed CLIs, live sessions and their worktrees, the headroom the Memory Guard keeps. Read-only; it never changes agent settings.",
+            defaultOn: true),
+        AgentCapability(
             id: "proposeCleanups",
             title: "Propose cleanups",
             summary: "Suggests what is safe to clean, from the cleaners the app already reviews — always as a list to look at first.",

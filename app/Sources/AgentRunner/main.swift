@@ -262,6 +262,11 @@ if args.first == "--probe-quit" {
 if args.first == "--probe-agent-diagnostic" {
     probeAgentDiagnostic()
 }
+// `--probe-agent-inventory`: the agent inventory's parser on the sweep's exact
+// shape, plus the key-parity rule. See AgentInventoryProbes.swift.
+if args.first == "--probe-agent-inventory" {
+    probeAgentInventory()
+}
 
 // System screens: `--probe-startup [--file <login-items.tsv>]` (Login & Startup
 // Items), `--probe-startup-changes [--log <persistence.log>]` (its Changes scope),
@@ -271,6 +276,7 @@ if args.first == "--probe-startup" { probeStartup(args) }
 if args.first == "--probe-startup-changes" { probeStartupChanges(args) }
 if args.first == "--probe-network" { probeNetwork(args) }
 if args.first == "--probe-reports" { probeReports(args) }
+if args.first == "--probe-report-metrics" { probeReportMetrics() }
 
 // `--probe-guard-history` prints Memory Guard's history as the screen groups it.
 // See GuardHistoryProbe.swift.

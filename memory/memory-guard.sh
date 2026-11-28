@@ -412,6 +412,11 @@ log "guard started (pid $$, interval=${INTERVAL}s, hard-cap=${HARD_CAP_MB}MB)"
 if [[ -f "$LOG_FILE" && $(stat -f '%z' "$LOG_FILE" 2>/dev/null || echo 0) -gt 5242880 ]]; then
   mv "$LOG_FILE" "${LOG_FILE}.1"
 fi
+# the launchd stderr capture grows while nobody watches (48 MB once): one
+# rotation per start bounds it, and the tick itself appends nothing to it
+if [[ -f "${LOG_DIR}/guard.err.log" && $(stat -f '%z' "${LOG_DIR}/guard.err.log" 2>/dev/null || echo 0) -gt 5242880 ]]; then
+  mv "${LOG_DIR}/guard.err.log" "${LOG_DIR}/guard.err.log.1"
+fi
 
 # ---------- headroom file: the present state an agent can check (default on) ----------
 # One atomically-replaced file per tick. The figures are the same stock reads
