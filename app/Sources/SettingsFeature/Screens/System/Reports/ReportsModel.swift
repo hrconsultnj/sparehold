@@ -12,6 +12,9 @@ final class ReportsModel {
     private(set) var preface: [MarkdownBlock] = []
     private(set) var sections: [ReportSection] = []
     private(set) var blocksFor: ReportDocument.ID?
+    /// The scored cards for the selected report, from its sidecar (nil when
+    /// the report predates them).
+    private(set) var metrics: [ReportMetric]?
     var selection: ReportDocument.ID? {
         didSet { if selection != oldValue { Task { await loadBlocks() } } }
     }
@@ -54,14 +57,16 @@ final class ReportsModel {
     }
 
     private func loadBlocks() async {
-        guard let report = selected else { preface = []; sections = []; blocksFor = nil; return }
+        guard let report = selected else { preface = []; sections = []; blocksFor = nil; metrics = nil; return }
         let url = report.url
         let parsed = await Task.detached(priority: .userInitiated) {
-            ReportSection.split((try? String(contentsOf: url, encoding: .utf8)).map(ReportMarkdown.blocks(from:)) ?? [])
+            (ReportSection.split((try? String(contentsOf: url, encoding: .utf8)).map(ReportMarkdown.blocks(from:)) ?? []),
+             ReportMetric.load(beside: url))
         }.value
         guard selection == report.id else { return }
-        preface = parsed.preface
-        sections = parsed.sections
+        preface = parsed.0.preface
+        sections = parsed.0.sections
+        metrics = parsed.1
         blocksFor = report.id
     }
 }

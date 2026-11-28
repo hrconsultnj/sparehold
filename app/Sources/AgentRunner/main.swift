@@ -276,6 +276,7 @@ if args.first == "--probe-startup" { probeStartup(args) }
 if args.first == "--probe-startup-changes" { probeStartupChanges(args) }
 if args.first == "--probe-network" { probeNetwork(args) }
 if args.first == "--probe-reports" { probeReports(args) }
+if args.first == "--probe-report-metrics" { probeReportMetrics() }
 
 // `--probe-guard-history` prints Memory Guard's history as the screen groups it.
 // See GuardHistoryProbe.swift.

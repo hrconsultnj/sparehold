@@ -142,3 +142,59 @@ func probeReports(_ args: [String]) -> Never {
     print(problems.isEmpty ? "levels: ok" : "levels: PROBLEMS\n" + problems.map { "  " + $0 }.joined(separator: "\n"))
     exit(problems.isEmpty ? 0 : 1)
 }
+
+/// `--probe-report-metrics`: the scored-cards sidecar's parser (issue #12),
+/// judged on a fixture in the analyzer's exact shape, plus the parity rule —
+/// the columns memory/analyze.sh's metrics sidecar writes are the columns the
+/// parser names, so a moved column fails loudly before any card renders.
+@MainActor
+func probeReportMetrics() -> Never {
+    var failed = 0
+    func flag(_ label: String, _ got: Bool, _ expected: Bool) {
+        let ok = got == expected
+        if !ok { failed += 1 }
+        print("\(ok ? "PASS" : "FAIL") \(label)\(ok ? "" : "   (expected \(expected), got \(got))")")
+    }
+    func expect(_ label: String, _ got: String, _ expected: String) {
+        let ok = got == expected
+        if !ok { failed += 1 }
+        print("\(ok ? "PASS" : "FAIL") \(label): \(got)\(ok ? "" : "   (expected \(expected))")")
+    }
+
+    let fixture = """
+    metric\tvalue\tnormal\tstatus\tactions
+    memory_pressure\tlevel 2\tlevel 1 (normal for any Mac)\twatch\tmonitor
+    swap_used\t80% of swap\tunder 40%\tact\tmemorykind:compressed, log:reclaim
+    swap_used\t99% of swap\tduplicate\tact\tmonitor
+    broken_row\tthree cells only
+    weird_status\t12 GB\tnormal\talarming\tmonitor
+    cpu_load\t2.12 on 12 cores\tat or under the core count\tin_range\tmonitor
+    """
+    let rows = ReportMetric.parse(tsv: fixture)
+    expect("the header is not a row", String(rows.count), "3")
+    expect("   the duplicate metric keeps its first row", rows.first { $0.id == "swap_used" }?.value ?? "?", "80% of swap")
+    expect("   the statuses that exist parse", rows.last?.status.rawValue ?? "?", ReportMetric.Status.inRange.rawValue)
+    expect("   actions split on the comma", String(rows.first { $0.id == "swap_used" }?.actions.count ?? -1), "2")
+    flag("   an unknown status drops the row, never invents one", !rows.contains { $0.status.rawValue == "alarming" }, true)
+    flag("   the act card's status is act", rows.first { $0.id == "swap_used" }?.status == .act, true)
+
+    // load(beside:) reads the sidecar in the report's own folder, nil when absent
+    let scratch = ProbeScratch.folder("probe-report-metrics")
+    let reportURL = scratch.appending(path: "report-1200.md")
+    try? "report".write(to: reportURL, atomically: true, encoding: .utf8)
+    flag("no sidecar: nil, the report still renders", ReportMetric.load(beside: reportURL) == nil, true)
+    try? fixture.write(to: scratch.appending(path: "metrics.tsv"), atomically: true, encoding: .utf8)
+    expect("the sidecar beside the report loads", String(ReportMetric.load(beside: reportURL)?.count ?? -1), "3")
+
+    // parity: the columns the analyzer writes are the columns the parser names
+    let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let analyzer = (try? String(contentsOf: repoRoot.appending(path: "memory/analyze.sh"), encoding: .utf8)) ?? ""
+    flag("the sidecar's header names every parser column",
+         analyzer.contains("row \"metric\" \"value\" \"normal\" \"status\" \"actions\""), true)
+    flag("   the analyzer writes the file the parser loads beside the report",
+         analyzer.contains("metrics.tsv"), true)
+
+    print("\n\(failed == 0 ? "all report-metrics rules hold" : "\(failed) report-metrics rule(s) broken")")
+    ProbeScratch.finish(failed == 0 ? 0 : 1)
+}

@@ -97,12 +97,15 @@ struct ReportsView: View {
         }
     }
 
-    /// The open report's front matter, then its sections as contents rows — each
-    /// row one level down, pushing the section's own screen.
+    /// The open report's front matter, then — when the report carries them —
+    /// the scored cards, then its sections as contents rows.
     private func document(_ report: ReportDocument) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(model.preface.enumerated()), id: \.offset) { _, block in ReportBlocksView.block(block) }
+                if let metrics = model.metrics, !metrics.isEmpty {
+                    MetricCards(cards: metrics)
+                }
                 contents(of: report)
             }
             .padding()

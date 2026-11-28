@@ -342,6 +342,60 @@ FREE_PCT=$(memory_pressure -Q 2>/dev/null | awk -F': ' '/free percentage/ {print
 
 ln -sfn "${REPORT}" "${LATEST}"
 
+# ---------- metrics sidecar: the report's numbers, scored ----------
+# One row per card the app's Reports screen shows above the report, with the
+# SAME thresholds the Diagnosis prose just used — both come from these
+# variables, so the cards and the report can never disagree. "Normal" is
+# RAM-scaled here (the way Setup scales the guard's cap); disk thresholds
+# live in the storage analyzer's own sidecar. Actions are deep-link targets
+# the app resolves; a button opens the tool that acts on that number.
+metrics_tsv() {
+  local electron=0 dev=0
+  # the census is per-app with an Electron check, so the count here re-runs
+  # the exact pipeline the report's §8 prints
+  electron=$(ps axo rss,comm | awk '
+    /\/Applications\/[^\/]+\.app/ {
+      rss=$1; $1=""; cmd=$0;
+      match(cmd, /\/Applications\/[^\/]+\.app/); app=substr(cmd, RSTART, RLENGTH);
+      mem[app]+=rss
+    }
+    END { for (a in mem) print a }' | while IFS= read -r apppath; do
+      if find "$apppath" -maxdepth 6 \( -name "Electron Framework.framework" -o -name "Chromium Embedded Framework.framework" \) -print -quit 2>/dev/null | grep -q .; then
+        echo x
+      fi
+    done | grep -c . || true)
+  dev=$(ps axo args | grep -E "node|bun |deno " | grep -vE "grep|node_exporter" | grep -c . || true)
+  ram_gb=$(awk -v t="$TOTAL_BYTES" 'BEGIN{printf "%.0f", t/1073741824}')
+  demand_gb="${DEMAND_GB:-?}"
+  press_status="in_range"; [[ "$PRESSURE_LEVEL" -ge 4 ]] 2>/dev/null && press_status="act"
+  [[ "$PRESSURE_LEVEL" == "2" ]] && press_status="watch"
+  swap_status="in_range"; [[ "$SWAP_PCT" -ge 80 ]] 2>/dev/null && swap_status="act"
+  [[ "$SWAP_PCT" -ge 40 ]] && swap_status="watch"
+  comp_status="in_range"; [[ "$COMP_SHARE" -ge 35 ]] 2>/dev/null && comp_status="watch"
+  demand_status="in_range"; awk -v d="$OVERCOMMIT" 'BEGIN{exit !(d+0 >= 2.0)}' && demand_status="act"
+  [[ "$demand_status" == "in_range" ]] && awk -v d="$OVERCOMMIT" 'BEGIN{exit !(d+0 >= 1.5)}' && demand_status="watch"
+  cpu_status="in_range"; awk -v l="$LOAD1" -v c="$NCPU" 'BEGIN{exit !(l+0 > c+0)}' && cpu_status="act"
+  [[ "$cpu_status" == "in_range" ]] && awk -v l="$LOAD1" -v c="$NCPU" 'BEGIN{exit !(l+0 > (c+0) * 0.8)}' && cpu_status="watch"
+  electron_status="in_range"; [[ "$electron" -ge 15 ]] 2>/dev/null && electron_status="act"
+  [[ "$electron" -ge 8 ]] && electron_status="watch"
+  dev_status="in_range"; [[ "$dev" -ge 15 ]] 2>/dev/null && dev_status="act"
+  [[ "$dev" -ge 10 ]] && dev_status="watch"
+  # a %s argument never interprets \t: the tabs come from the FORMAT, so each
+  # row goes through its own printf
+  row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+  {
+    row "metric" "value" "normal" "status" "actions"
+    row "memory_pressure" "level ${PRESSURE_LEVEL:-?}" "level 1 (normal for any Mac)" "$press_status" "monitor"
+    row "swap_used" "${SWAP_PCT:-?}% of swap" "under 40% — demand past RAM is history unless pressure says otherwise" "$swap_status" "memorykind:compressed, log:reclaim"
+    row "compressor_share" "${COMP_SHARE:-?}% of used RAM" "under 35% of used RAM (this Mac: ${ram_gb} GB)" "$comp_status" "memorykind:compressed"
+    row "demand_vs_ram" "${demand_gb} GB (${OVERCOMMIT:-?}×)" "about 1.0× of the ${ram_gb} GB installed" "$demand_status" "monitor"
+    row "electron_apps" "${electron} running" "a handful — every one is a browser in disguise" "$electron_status" "monitor"
+    row "forgotten_dev" "${dev} processes" "a few servers you can name" "$dev_status" "log:memoryClean"
+    row "cpu_load" "${LOAD1:-?} on ${NCPU:-?} cores" "at or under the core count" "$cpu_status" "monitor"
+  } > "${DATE_DIR}/metrics.tsv"
+}
+metrics_tsv
+
 echo "Report written to: ${REPORT}"
 echo "Latest symlink:    ${LATEST}"
 
