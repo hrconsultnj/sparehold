@@ -8,10 +8,13 @@ bullet as a feature of its own, so every bullet ends with a short tag that
 GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
-## Next
+## v3.7.0 — Ask Sees the Agents, Reports Judge the Numbers
 
-- Reports now score their numbers against this Mac: above each report, a card per number — the value, what is normal for this Mac, an in-range/watch/act verdict from the analyzer's own thresholds — with a button that opens the tool that acts on it. The storage report's disk card says how much of the Data volume is free, percentage-based so it holds on any Mac, and points at the Disk hub and the four cleanups when space runs low. <!-- wn: open=reports icon=chart.bar title="Numbers, Scored" -->
+3.7.0 closes the loop the Agent Diagnostic opened: what is running now, whether this Mac can take more, and what each number in a report means for this Mac — with the button that acts on it.
+
 - Ask can now see your agents: one sweep reads the installed coding-agent CLIs, the live sessions and their worktrees, and the headroom the Memory Guard keeps — so "what is running and can this Mac take more" is a question it can answer from measured figures, read-only, behind its own capability switch. <!-- wn: open=ask icon=person.crop.rectangle.stack title="Ask Sees the Agents" -->
+- Reports now score their numbers against this Mac: above each report, a card per number — the value, what is normal for this Mac, an in-range/watch/act verdict from the analyzer's own thresholds — with a button that opens the tool that acts on it. The storage report's disk card says how much of the Data volume is free, percentage-based so it holds on any Mac, and points at the Disk hub and the four cleanups when space runs low. <!-- wn: open=reports icon=chart.bar title="Numbers, Scored" -->
+- Nothing you can see grows forever: the Guardian's own-age sweep now includes the Agent Diagnostic's dated runs, and the Memory Guard rotates its launchd error capture at startup like its log — a capture nobody watches had grown to 48 megabytes. <!-- wn: open=guard icon=wrench title="Nothing Grows Forever" -->
 
 ## v3.6.0 — What Led Up to the Freeze
 <!-- wn: released=2026-11-27 -->
