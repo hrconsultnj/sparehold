@@ -10,6 +10,8 @@ Older entries below keep the name the app had when they shipped.
 
 ## Next
 
+- Ask can now see your agents: one sweep reads the installed coding-agent CLIs, the live sessions and their worktrees, and the headroom the Memory Guard keeps — so "what is running and can this Mac take more" is a question it can answer from measured figures, read-only, behind its own capability switch. <!-- wn: open=ask icon=person.crop.rectangle.stack title="Ask Sees the Agents" -->
+
 ## v3.6.0 — What Led Up to the Freeze
 <!-- wn: released=2026-11-27 -->
 

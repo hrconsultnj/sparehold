@@ -451,6 +451,8 @@ public actor LocalSession: AgentSession {
         case .scanStorage: "Running the storage scan"
         case .scanMemory: "Running the memory scan"
         case .scanNetwork: "Taking the network snapshot"
+        case .scanAgents: "Sweeping the agents"
+        case .readAgentInventory: "Reading the agent inventory"
         case .readReport: "Reading the report"
         case .proposeCleanup: "Preparing the cleanup preview"
         case .runApprovedCleanup: "Applying what was approved"
@@ -463,6 +465,8 @@ public actor LocalSession: AgentSession {
         case .scanStorage: JobKind.storageReport.script.lastPathComponent
         case .scanMemory: JobKind.memoryReport.script.lastPathComponent
         case .scanNetwork: JobKind.networkSnapshot.script.lastPathComponent
+        case .scanAgents: JobKind.agentSweep.script.lastPathComponent
+        case .readAgentInventory: "reports/agents/inventory.json"
         case .readReport: "reports/storage, reports/memory"
         case .proposeCleanup: "dry run"
         case .runApprovedCleanup: "JobStore.apply(from:approved:)"
