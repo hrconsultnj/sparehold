@@ -9,6 +9,7 @@ GitHub does not show; `scripts/changelog-check.sh` says what it must hold.
 Older entries below keep the name the app had when they shipped.
 
 ## v3.7.0 — Ask Sees the Agents, Reports Judge the Numbers
+<!-- wn: released=2026-11-27 -->
 
 3.7.0 closes the loop the Agent Diagnostic opened: what is running now, whether this Mac can take more, and what each number in a report means for this Mac — with the button that acts on it.
 
