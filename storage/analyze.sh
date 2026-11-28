@@ -685,6 +685,45 @@ timed() {
 # Update latest.md symlink
 ln -sfn "${REPORT}" "${LATEST}"
 
+# ---------- metrics sidecar: the report's numbers, scored ----------
+# One row per card the app's Reports screen shows above the report. The disk
+# thresholds are new (the memory analyzer scales by RAM; nothing scaled by
+# disk size before): under 20% free is watch, under 10% is act — percentages
+# of the Data volume's capacity, not fixed GB, so they hold on any Mac. The
+# buttons open the Disk hub and the four cleanups' previews; nothing runs
+# from the card alone.
+metrics_tsv() {
+  local df_line free_kb cap_kb free_pct
+  df_line=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4, $2}')
+  free_kb="${df_line%% *}"; cap_kb="${df_line##* }"
+  if [[ -n "$free_kb" && -n "$cap_kb" && "$cap_kb" -gt 0 ]] 2>/dev/null; then
+    free_pct=$(awk -v f="$free_kb" -v c="$cap_kb" 'BEGIN{printf "%.0f", f*100/c}')
+  else
+    free_pct=""
+  fi
+  local disk_status="in_range"
+  [[ -n "$free_pct" ]] || disk_status=""
+  [[ -n "$free_pct" && "$free_pct" -lt 10 ]] 2>/dev/null && disk_status="act"
+  [[ "$disk_status" == "in_range" && -n "$free_pct" && "$free_pct" -lt 20 ]] 2>/dev/null && disk_status="watch"
+  # a human size for the free figure, the way the report writes one
+  local free_h
+  if [[ -n "$free_kb" ]]; then
+    free_h=$(awk -v kb="$free_kb" 'BEGIN{printf "%.1f GB", kb/1048576}')
+  else
+    free_h="unknown"
+  fi
+  row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+  {
+    row "metric" "value" "normal" "status" "actions"
+    if [[ -n "$free_pct" ]]; then
+      row "disk_free" "$free_h (${free_pct}% free)" "over 20% of the Data volume's capacity free" "$disk_status" "disk:capacity, disk:caches, disk:downloads, disk:unused, disk:temp"
+    else
+      row "disk_free" "unknown" "the disk's capacity could not be read" "in_range" "disk:capacity"
+    fi
+  } > "${DATE_DIR}/metrics.tsv"
+}
+metrics_tsv
+
 echo "Report written to: ${REPORT}"
 echo "Latest symlink:    ${LATEST}"
 
